@@ -1765,6 +1765,11 @@ input::-ms-clear {
   font-size: 11px;
 }
 
+.emotion-legend text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
 .chart-grid-line {
   stroke: color-mix(in srgb, var(--muted) 24%, transparent);
   stroke-width: 1;

@@ -487,8 +487,8 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "class",
-    label: "Class",
-    unit: "1-5",
+    label: "ESM (ระดับอารมณ์)",
+    unit: "Emotion 1-5",
     color: "#ef4444",
     kind: "class",
     decimals: 0,
@@ -499,6 +499,14 @@ const MOVEMENT_LEVELS = [
   { label: "High", color: "#ef4444" },
   { label: "Medium", color: "#f59e0b" },
   { label: "Low", color: "#2f6fbd" },
+] as const;
+
+const EMOTION_LEVELS = [
+  { value: 1, label: "สนุก", color: "#2f6fbd" },
+  { value: 2, label: "ดี", color: "#39a866" },
+  { value: 3, label: "ปกติ", color: "#a3a3a3" },
+  { value: 4, label: "ไม่ดี", color: "#ef4444" },
+  { value: 5, label: "ไม่มีเกม", color: "#991b1b" },
 ] as const;
 
 function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
@@ -523,6 +531,11 @@ function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
 
 function formatClassValue(value: number | null) {
   return value === null ? "-" : Math.max(1, Math.min(5, Math.round(value)));
+}
+
+function emotionFromValue(value: number) {
+  const classValue = Math.max(1, Math.min(5, Math.round(value)));
+  return EMOTION_LEVELS[classValue - 1];
 }
 
 function timeLabel(value: number) {
@@ -640,9 +653,9 @@ function SensorTimelineChart({
   const height = metric.kind === "class" ? 116 : 150;
   const padding = {
     top: 16,
-    right: metric.kind === "movement" ? 90 : 22,
+    right: metric.kind === "class" ? 290 : metric.kind === "movement" ? 90 : 22,
     bottom: 42,
-    left: 54,
+    left: metric.kind === "class" ? 68 : 54,
   };
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
@@ -707,7 +720,6 @@ function SensorTimelineChart({
       y: yForValue(point.value),
     })),
   );
-  const classColors = ["#2f6fbd", "#39a866", "#a3a3a3", "#ef4444", "#111827"];
   const movementLabels = ["High", "Medium", "Low"];
   const movementBaseY = yForValue(domain.min);
   const barWidth = Math.max(
@@ -724,7 +736,7 @@ function SensorTimelineChart({
       metric.kind === "movement"
         ? movementColor(point.value, domain)
         : metric.kind === "class"
-          ? classColors[Math.max(1, Math.min(5, Math.round(point.value))) - 1]
+          ? emotionFromValue(point.value).color
           : metric.color;
     const metricValue =
       metric.kind === "class"
@@ -733,12 +745,19 @@ function SensorTimelineChart({
     const rows = [
       { label: "ACT", value: act },
       {
-        label: "Value",
+        label: metric.kind === "class" ? "Emotion" : "Value",
         value:
-          metric.kind === "movement" ? metricValue : `${metricValue} ${metric.unit}`,
+          metric.kind === "class"
+            ? emotionFromValue(point.value).label
+            : metric.kind === "movement"
+              ? metricValue
+              : `${metricValue} ${metric.unit}`,
         color,
       },
     ];
+    if (metric.kind === "class") {
+      rows.push({ label: "Value", value: metricValue, color });
+    }
     if (metric.kind === "movement") {
       rows.splice(2, 0, {
         label: "Level",
@@ -786,7 +805,7 @@ function SensorTimelineChart({
                   {metric.kind === "movement"
                     ? movementLabels[index]
                     : metric.kind === "class"
-                      ? Math.round(tick)
+                      ? emotionFromValue(tick).label
                       : tick.toFixed(metric.decimals)}
                 </text>
               </g>
@@ -918,33 +937,48 @@ function SensorTimelineChart({
               </g>
             </>
           ) : (
-            drawable.map((point, index) => {
-              const classValue = Math.max(
-                1,
-                Math.min(5, Math.round(point.value)),
-              );
-              return (
-                <circle
-                  key={`${metric.key}-${point.time}-${index}`}
-                  cx={xForActTimestamp(point.log, point.time)}
-                  cy={yForValue(classValue)}
-                  r={4}
-                  fill={classColors[classValue - 1]}
-                  onPointerEnter={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
-                  }
-                  onPointerMove={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
-                  }
-                  onPointerDown={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
-                  }
-                  onPointerLeave={() => setTooltip(null)}
-                  onPointerUp={() => setTooltip(null)}
-                  onPointerCancel={() => setTooltip(null)}
-                />
-              );
-            })
+            <>
+              {drawable.map((point, index) => {
+                const emotion = emotionFromValue(point.value);
+                return (
+                  <circle
+                    key={`${metric.key}-${point.time}-${index}`}
+                    cx={xForActTimestamp(point.log, point.time)}
+                    cy={yForValue(emotion.value)}
+                    r={4}
+                    fill={emotion.color}
+                    onPointerEnter={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerMove={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerDown={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerLeave={() => setTooltip(null)}
+                    onPointerUp={() => setTooltip(null)}
+                    onPointerCancel={() => setTooltip(null)}
+                  />
+                );
+              })}
+              <g
+                className="emotion-legend"
+                transform={`translate(${width - padding.right + 16} ${padding.top + 2})`}
+              >
+                {EMOTION_LEVELS.map((emotion, index) => (
+                  <g
+                    key={emotion.value}
+                    transform={`translate(${index * 54} 0)`}
+                  >
+                    <circle cx={4} cy={4} r={3.5} fill={emotion.color} />
+                    <text x={12} y={8}>
+                      {emotion.label}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            </>
           )}
         </svg>
       </div>
