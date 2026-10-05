@@ -441,8 +441,15 @@ type TimelineMetric = {
   label: string;
   unit: string;
   color: string;
-  kind: "line" | "class";
+  kind: "line" | "movement" | "class";
   decimals: number;
+};
+
+type ChartTooltip = {
+  x: number;
+  y: number;
+  title: string;
+  rows: { label: string; value: string; color?: string }[];
 };
 
 const TIMELINE_METRICS: TimelineMetric[] = [
@@ -472,10 +479,10 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "imu",
-    label: "Movement (IMU)",
-    unit: "a.u.",
+    label: "Movement (Accelerometer)",
+    unit: "Low / Medium / High",
     color: "#f59e0b",
-    kind: "line",
+    kind: "movement",
     decimals: 2,
   },
   {
@@ -487,6 +494,12 @@ const TIMELINE_METRICS: TimelineMetric[] = [
     decimals: 0,
   },
 ];
+
+const MOVEMENT_LEVELS = [
+  { label: "High", color: "#ef4444" },
+  { label: "Medium", color: "#f59e0b" },
+  { label: "Low", color: "#2f6fbd" },
+] as const;
 
 function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
   const finite = (value: number | null) =>
@@ -521,6 +534,11 @@ function timeLabel(value: number) {
 
 function metricDomain(values: number[], metric: TimelineMetric) {
   if (metric.key === "class") return { min: 1, max: 5, ticks: [1, 2, 3, 4, 5] };
+  if (metric.kind === "movement") {
+    const rawMax = values.length ? Math.max(...values) : 1;
+    const max = Math.max(rawMax, 1);
+    return { min: 0, max, ticks: [max, max / 2, 0] };
+  }
   if (!values.length) return { min: 0, max: 1, ticks: [0, 0.5, 1] };
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -532,6 +550,20 @@ function metricDomain(values: number[], metric: TimelineMetric) {
     max,
     ticks: [min, min + (max - min) / 2, max],
   };
+}
+
+function movementColor(value: number, domain: { min: number; max: number }) {
+  const ratio = (value - domain.min) / (domain.max - domain.min || 1);
+  if (ratio >= 0.67) return MOVEMENT_LEVELS[0].color;
+  if (ratio >= 0.34) return MOVEMENT_LEVELS[1].color;
+  return MOVEMENT_LEVELS[2].color;
+}
+
+function movementLevel(value: number, domain: { min: number; max: number }) {
+  const ratio = (value - domain.min) / (domain.max - domain.min || 1);
+  if (ratio >= 0.67) return MOVEMENT_LEVELS[0].label;
+  if (ratio >= 0.34) return MOVEMENT_LEVELS[1].label;
+  return MOVEMENT_LEVELS[2].label;
 }
 
 function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
@@ -603,9 +635,15 @@ function SensorTimelineChart({
   metric: TimelineMetric;
   points: { log: WatchLog; time: number }[];
 }) {
+  const [tooltip, setTooltip] = useState<ChartTooltip | null>(null);
   const width = 1180;
   const height = metric.kind === "class" ? 116 : 150;
-  const padding = { top: 16, right: 22, bottom: 42, left: 54 };
+  const padding = {
+    top: 16,
+    right: metric.kind === "movement" ? 90 : 22,
+    bottom: 42,
+    left: 54,
+  };
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
   const acts = sortActs(
@@ -670,6 +708,51 @@ function SensorTimelineChart({
     })),
   );
   const classColors = ["#2f6fbd", "#39a866", "#a3a3a3", "#ef4444", "#111827"];
+  const movementLabels = ["High", "Medium", "Low"];
+  const movementBaseY = yForValue(domain.min);
+  const barWidth = Math.max(
+    2,
+    Math.min(5, (actStep || innerWidth) / Math.max(drawable.length, 1) / 1.6),
+  );
+  const tooltipForPoint = (
+    point: { log: WatchLog; time: number; value: number },
+    clientX: number,
+    clientY: number,
+  ) => {
+    const act = formatActLabel(point.log.act?.trim() || "Unknown");
+    const color =
+      metric.kind === "movement"
+        ? movementColor(point.value, domain)
+        : metric.kind === "class"
+          ? classColors[Math.max(1, Math.min(5, Math.round(point.value))) - 1]
+          : metric.color;
+    const metricValue =
+      metric.kind === "class"
+        ? String(Math.max(1, Math.min(5, Math.round(point.value))))
+        : point.value.toFixed(metric.decimals);
+    const rows = [
+      { label: "ACT", value: act },
+      {
+        label: "Value",
+        value:
+          metric.kind === "movement" ? metricValue : `${metricValue} ${metric.unit}`,
+        color,
+      },
+    ];
+    if (metric.kind === "movement") {
+      rows.splice(2, 0, {
+        label: "Level",
+        value: movementLevel(point.value, domain),
+        color,
+      });
+    }
+    setTooltip({
+      x: clientX,
+      y: clientY,
+      title: formatTimestamp(point.log.timestamp) || timeLabel(point.time),
+      rows,
+    });
+  };
 
   return (
     <article className="sensor-timeline-chart">
@@ -683,10 +766,10 @@ function SensorTimelineChart({
           role="img"
           aria-label={`${metric.label} by timestamp`}
         >
-          {domain.ticks.map((tick) => {
+          {domain.ticks.map((tick, index) => {
             const y = yForValue(tick);
             return (
-              <g key={tick}>
+              <g key={`${metric.key}-${index}-${tick}`}>
                 <line
                   className="chart-grid-line"
                   x1={padding.left}
@@ -700,9 +783,11 @@ function SensorTimelineChart({
                   y={y + 4}
                   textAnchor="end"
                 >
-                  {metric.kind === "class"
-                    ? Math.round(tick)
-                    : tick.toFixed(metric.decimals)}
+                  {metric.kind === "movement"
+                    ? movementLabels[index]
+                    : metric.kind === "class"
+                      ? Math.round(tick)
+                      : tick.toFixed(metric.decimals)}
                 </text>
               </g>
             );
@@ -773,8 +858,64 @@ function SensorTimelineChart({
                   cy={yForValue(point.value)}
                   r={2.4}
                   fill={metric.color}
+                  onPointerEnter={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerMove={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerDown={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerLeave={() => setTooltip(null)}
+                  onPointerUp={() => setTooltip(null)}
+                  onPointerCancel={() => setTooltip(null)}
                 />
               ))}
+            </>
+          ) : metric.kind === "movement" ? (
+            <>
+              {drawable.map((point, index) => {
+                const x = xForActTimestamp(point.log, point.time);
+                const y = yForValue(point.value);
+                return (
+                  <rect
+                    key={`${metric.key}-${point.time}-${index}`}
+                    className="movement-sample-bar"
+                    x={x - barWidth / 2}
+                    y={Math.min(y, movementBaseY)}
+                    width={barWidth}
+                    height={Math.max(2, Math.abs(movementBaseY - y))}
+                    rx={0.8}
+                    fill={movementColor(point.value, domain)}
+                    onPointerEnter={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerMove={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerDown={(event) =>
+                      tooltipForPoint(point, event.clientX, event.clientY)
+                    }
+                    onPointerLeave={() => setTooltip(null)}
+                    onPointerUp={() => setTooltip(null)}
+                    onPointerCancel={() => setTooltip(null)}
+                  />
+                );
+              })}
+              <g
+                className="movement-legend"
+                transform={`translate(${width - padding.right + 16} ${padding.top + 4})`}
+              >
+                {MOVEMENT_LEVELS.map((level, index) => (
+                  <g key={level.label} transform={`translate(0 ${index * 18})`}>
+                    <rect width={9} height={9} fill={level.color} rx={1} />
+                    <text x={14} y={8}>
+                      {level.label}
+                    </text>
+                  </g>
+                ))}
+              </g>
             </>
           ) : (
             drawable.map((point, index) => {
@@ -789,12 +930,38 @@ function SensorTimelineChart({
                   cy={yForValue(classValue)}
                   r={4}
                   fill={classColors[classValue - 1]}
+                  onPointerEnter={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerMove={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerDown={(event) =>
+                    tooltipForPoint(point, event.clientX, event.clientY)
+                  }
+                  onPointerLeave={() => setTooltip(null)}
+                  onPointerUp={() => setTooltip(null)}
+                  onPointerCancel={() => setTooltip(null)}
                 />
               );
             })
           )}
         </svg>
       </div>
+      {tooltip ? (
+        <div
+          className="chart-tooltip"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          <strong>{tooltip.title}</strong>
+          {tooltip.rows.map((row) => (
+            <span key={`${row.label}-${row.value}`}>
+              {row.color ? <i style={{ background: row.color }} /> : null}
+              {row.label}: {row.value}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
