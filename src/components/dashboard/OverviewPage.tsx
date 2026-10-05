@@ -1,17 +1,17 @@
 "use client";
 
-import { CircleCheckBig, Gauge, UsersRound } from "lucide-react";
-import { useMemo } from "react";
+import { Download, Eye, Search, UsersRound } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { Participant, SceneData, WatchLog } from "@/lib/supabase";
 import {
   BarPanel,
   sortActs,
   formatActLabel,
-  DataTable,
   DonutPanel,
   MetricCard,
   PageHeader,
   countBy,
+  downloadCsv,
   formatNumber,
   formatPercent,
   latestDate,
@@ -21,6 +21,7 @@ import {
   withinDateRange,
   type Filters,
 } from "./shared";
+import { ParticipantWatchProfile } from "./WatchPage";
 
 function actPlayDuration(scenes: SceneData[]) {
   const playDurations = scenes
@@ -102,6 +103,7 @@ export function OverviewPage({
   setFilters: (filters: Filters) => void;
   canExport: boolean;
 }) {
+  const [selectedWatchUserId, setSelectedWatchUserId] = useState<number | null>(null);
   const availableActs = useMemo(
     () => sceneActsInDataOrder(sceneData),
     [sceneData],
@@ -127,11 +129,6 @@ export function OverviewPage({
       (!filters.act.length || filters.act.includes(String(log.act ?? ""))) &&
       withinDateRange(log.timestamp, filters),
   );
-  const completedUserIds = new Set(filteredScenes.map((scene) => scene.userId));
-  const completionRate = filteredParticipants.length
-    ? (completedUserIds.size / filteredParticipants.length) * 100
-    : 0;
-
   const ageData = countBy(filteredParticipants, (user) => user.age);
   const genderData = countBy(filteredParticipants, (user) => user.gender);
   const schoolData = countBy(filteredParticipants, (user) => user.school);
@@ -158,6 +155,7 @@ export function OverviewPage({
       : null;
 
     return {
+      UserId: user.userId,
       User: participantName(user),
       Age: user.age ?? "",
       Gender: user.gender ?? "",
@@ -172,36 +170,47 @@ export function OverviewPage({
     };
   });
 
+  if (selectedWatchUserId !== null) {
+    return (
+      <>
+        <PageHeader
+          title="Overview"
+          description="Participant watch profile and timestamp sensor data."
+        />
+        <div className="page-body">
+          <ParticipantWatchProfile
+            participants={participants}
+            watchLogs={watchLogs}
+            filters={filters}
+            selectedUserId={selectedWatchUserId}
+            canExport={canExport}
+            onBack={() => setSelectedWatchUserId(null)}
+          />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
-        title="Game Data"
+        title="Overview"
         description="Completion, demographics, and ACT performance across all participants."
         filters={filters}
         setFilters={setFilters}
         participants={participants}
       />
       <div className="page-body">
-        <section className="metric-grid overview-metrics">
-          <MetricCard
-            label="Participants"
-            value={filteredParticipants.length}
-            icon={UsersRound}
-          />
-          <MetricCard
-            label="Completed Users"
-            value={completedUserIds.size}
-            icon={CircleCheckBig}
-          />
-          <MetricCard
-            label="Completion Rate"
-            value={formatPercent(completionRate)}
-            icon={Gauge}
-          />
-        </section>
         <section className="dashboard-layout overview-layout">
           <div className="main-stack">
             <section className="overview-visual-grid">
+              <div className="metric-card-wrapper" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <MetricCard
+                  label="Participants"
+                  value={filteredParticipants.length}
+                  icon={UsersRound}
+                />
+              </div>
               <BarPanel title="Age Distribution" data={ageData} vertical />
               <DonutPanel title="Gender" data={genderData} icon={UsersRound} />
               <SchoolSummaryPanel data={schoolData} />
@@ -215,10 +224,10 @@ export function OverviewPage({
                 and stuff.
               </p>
             ) : null}
-            <DataTable
+            <ParticipantProgressTable
               rows={summaryRows}
-              exportFilename="participant-progress-summary.csv"
               canExport={canExport}
+              onView={setSelectedWatchUserId}
             />
           </div>
         </section>
@@ -226,3 +235,106 @@ export function OverviewPage({
     </>
   );
 }
+
+type ParticipantProgressRow = {
+  UserId: number;
+  User: string;
+  Age: number | string;
+  Gender: string;
+  School: string;
+  "Login Sessions": number;
+  "Total ACTs": number;
+  "Play Duration": string;
+  "Latest Complete": string;
+};
+
+function ParticipantProgressTable({
+  rows,
+  canExport,
+  onView,
+}: {
+  rows: ParticipantProgressRow[];
+  canExport: boolean;
+  onView: (userId: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const visibleRows = rows.filter((row) =>
+    JSON.stringify(row).toLowerCase().includes(query.toLowerCase()),
+  );
+  const exportRows = visibleRows.map((row) => ({
+    User: row.User,
+    Age: row.Age,
+    Gender: row.Gender,
+    School: row.School,
+    "Login Sessions": row["Login Sessions"],
+    "Total ACTs": row["Total ACTs"],
+    "Play Duration": row["Play Duration"],
+    "Latest Complete": row["Latest Complete"],
+  }));
+
+  return (
+    <section className="table-card">
+      <div className="table-action-row">
+        <div className="table-tools">
+          <Search size={16} />
+          <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <span>{visibleRows.length} rows</span>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={!canExport || !visibleRows.length}
+          onClick={() => downloadCsv("participant-progress-summary.csv", exportRows)}
+          type="button"
+        >
+          <Download size={16} /> Export CSV
+        </button>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Age</th>
+              <th>Gender</th>
+              <th>School</th>
+              <th>Login Sessions</th>
+              <th>Total ACTs</th>
+              <th>Play Duration</th>
+              <th>Latest Complete</th>
+              <th>Watch Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.length ? (
+              visibleRows.map((row) => (
+                <tr key={row.UserId}>
+                  <td>{row.User}</td>
+                  <td>{row.Age}</td>
+                  <td>{row.Gender}</td>
+                  <td>{row.School}</td>
+                  <td>{row["Login Sessions"]}</td>
+                  <td>{row["Total ACTs"]}</td>
+                  <td>{row["Play Duration"]}</td>
+                  <td>{row["Latest Complete"]}</td>
+                  <td>
+                    <button className="icon-action-button" onClick={() => onView(row.UserId)} title="View watch data" type="button">
+                      <Eye size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={9} className="empty-state">
+                  No data
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+

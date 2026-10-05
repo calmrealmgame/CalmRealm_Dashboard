@@ -1,20 +1,19 @@
 "use client";
 
-import { Activity, BarChart3, Eye, EyeOff, Lock, LogOut, Shield, Users } from "lucide-react";
+import { BarChart3, Eye, EyeOff, Lock, LogOut, Shield, Users } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   AccountsPage,
   OverviewPage,
-  WatchPage,
   emptyFilters,
   type Filters,
 } from "@/components/dashboard";
 import { supabase } from "@/lib/supabase";
 import type { DashboardAccount, Participant, SceneData, WatchLog } from "@/lib/supabase";
 
-type PageName = "overview" | "watch" | "accounts";
+type PageName = "overview" | "accounts";
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
@@ -108,10 +107,7 @@ export default function Home() {
         </div>
         <nav className="nav-list">
           <button className={page === "overview" ? "active" : ""} onClick={() => setPage("overview")}>
-            <BarChart3 size={18} /> Game Data
-          </button>
-          <button className={page === "watch" ? "active" : ""} onClick={() => setPage("watch")}>
-            <Activity size={18} /> Watch Data
+            <BarChart3 size={18} /> Overview
           </button>
           {showAccounts ? (
             <button className={page === "accounts" ? "active" : ""} onClick={() => setPage("accounts")}>
@@ -136,15 +132,6 @@ export default function Home() {
           <OverviewPage
             participants={participants}
             sceneData={sceneData}
-            watchLogs={watchLogs}
-            filters={filters}
-            setFilters={setFilters}
-            canExport={canExport}
-          />
-        ) : null}
-        {page === "watch" ? (
-          <WatchPage
-            participants={participants}
             watchLogs={watchLogs}
             filters={filters}
             setFilters={setFilters}

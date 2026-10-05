@@ -46,12 +46,15 @@ export type SceneData = {
 };
 
 export type WatchLog = {
+  [key: string]: unknown;
   watchId: string;
   act: string | null;
   timestamp: string | null;
   PPG: number | null;
+  HRV?: number | null;
   EDA: number | null;
   IMU: unknown;
+  Class?: number | null;
   emotionValue: string | null;
   LoginSession: number | null;
   userId: number | null;
