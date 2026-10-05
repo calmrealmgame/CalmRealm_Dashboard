@@ -700,10 +700,7 @@ export function DonutPanel({
       ) : null}
       <div className="donut-body">
         <div className="donut" style={{ background }}>
-          <div className="donut-center">
-            <strong>{total}</strong>
-            <small>Users</small>
-          </div>
+          <div className="donut-center" />
         </div>
         <div className="legend-list">
           {data.map((item, index) => {

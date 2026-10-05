@@ -20,6 +20,7 @@ import {
   sceneDuration,
   withinDateRange,
   type Filters,
+  MetricCard,
 } from "./shared";
 import { ParticipantWatchProfile } from "./WatchPage";
 

@@ -630,7 +630,7 @@ input::-ms-clear {
 }
 
 .metric-card {
-  min-height: 118px;
+  min-height: 280px;
   display: grid;
   place-content: center;
   gap: 10px;
@@ -2096,6 +2096,7 @@ table thead th:hover {
 }
 
 @media (max-width: 860px) {
+
   html,
   body {
     height: auto;
@@ -2308,5 +2309,3 @@ table thead th:hover {
     border-radius: 6px;
   }
 }
-
-
