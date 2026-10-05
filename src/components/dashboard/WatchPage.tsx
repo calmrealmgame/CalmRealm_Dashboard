@@ -203,8 +203,8 @@ export function WatchPage({
       <PageHeader
         title="Watch Data"
         description="Watch records grouped by ACT, participant, and physiological signal."
-        filters={filters}
-        setFilters={setFilters}
+        filters={selectedUser ? undefined : filters}
+        setFilters={selectedUser ? undefined : setFilters}
         participants={participants}
       />
       <div className="page-body">
