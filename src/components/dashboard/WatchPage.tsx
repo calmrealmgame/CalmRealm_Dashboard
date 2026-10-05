@@ -178,8 +178,7 @@ export function ParticipantWatchProfile({
   const selectedUser =
     sensorSummary.userSummaries.find(
       (summary) => summary.userId === selectedUserId,
-    ) ??
-    buildEmptyUserSensorSummary(userById.get(selectedUserId), acts.length);
+    ) ?? buildEmptyUserSensorSummary(userById.get(selectedUserId), acts.length);
   const selectedUserLogs = filteredLogs
     .filter((log) => log.userId === selectedUserId)
     .sort((a, b) => timestampMs(a.timestamp) - timestampMs(b.timestamp));
@@ -191,51 +190,47 @@ export function ParticipantWatchProfile({
 
   return (
     <>
-            <button
-              className="back-button"
-              onClick={onBack}
-              type="button"
-            >
-              <ArrowLeft size={16} />
-              Back to Overview
-            </button>
-            <section className="participant-detail-hero">
-              <div>
-                <span>Participant</span>
-                <strong>{selectedUser.user}</strong>
-                <small>
-                  {selectedUser.age ?? "-"} years ·{" "}
-                  {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)
-                    ?.label ?? selectedUser.sex}
-                  {selectedUser.school ? ` · ${selectedUser.school}` : ""}
-                </small>
-              </div>
-            </section>
-            <section className="dashboard-layout overview-layout">
-              <div className="main-stack">
-                <div className="table-heading secondary-heading">
-                  <div>
-                    <h2>Sensor Summary</h2>
-                    <p>Timestamp trends by login session for this participant.</p>
-                  </div>
-                </div>
-                <SensorTimelinePanel logs={selectedUserLogs} />
-                <div className="table-heading">
-                  <h2>Watch Samples</h2>
-                </div>
-                {!canExport ? (
-                  <p className="hint">
-                    Viewer role can view data only. Export is available for
-                    admin and stuff.
-                  </p>
-                ) : null}
-                <DataTable
-                  rows={selectedUserSamples}
-                  exportFilename={`watch-samples-${selectedUser.userId}.csv`}
-                  canExport={canExport}
-                />
-              </div>
-            </section>
+      <button className="back-button" onClick={onBack} type="button">
+        <ArrowLeft size={16} />
+        Back to Overview
+      </button>
+      <section className="participant-detail-hero">
+        <div>
+          <span>Participant</span>
+          <strong>{selectedUser.user}</strong>
+          <small>
+            {selectedUser.age ?? "-"} years ·{" "}
+            {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)
+              ?.label ?? selectedUser.sex}
+            {selectedUser.school ? ` · ${selectedUser.school}` : ""}
+          </small>
+        </div>
+      </section>
+      <section className="dashboard-layout overview-layout">
+        <div className="main-stack">
+          <div className="table-heading secondary-heading">
+            <div>
+              <h2>Sensor Summary</h2>
+              <p>Timestamp trends by login session for this participant.</p>
+            </div>
+          </div>
+          <SensorTimelinePanel logs={selectedUserLogs} />
+          <div className="table-heading">
+            <h2>Watch Samples</h2>
+          </div>
+          {!canExport ? (
+            <p className="hint">
+              Viewer role can view data only. Export is available for admin and
+              stuff.
+            </p>
+          ) : null}
+          <DataTable
+            rows={selectedUserSamples}
+            exportFilename={`watch-samples-${selectedUser.userId}.csv`}
+            canExport={canExport}
+          />
+        </div>
+      </section>
     </>
   );
 }
@@ -451,11 +446,46 @@ type TimelineMetric = {
 };
 
 const TIMELINE_METRICS: TimelineMetric[] = [
-  { key: "hrv", label: "HRV (RMSSD)", unit: "ms", color: "#39a866", kind: "line", decimals: 1 },
-  { key: "ppg", label: "PPG", unit: "BPM", color: "#2f6fbd", kind: "line", decimals: 1 },
-  { key: "eda", label: "Electrodermal Activity (EDA)", unit: "µS", color: "#9b5bd6", kind: "line", decimals: 2 },
-  { key: "imu", label: "Movement (IMU)", unit: "a.u.", color: "#f59e0b", kind: "line", decimals: 2 },
-  { key: "class", label: "Class", unit: "1-5", color: "#ef4444", kind: "class", decimals: 0 },
+  {
+    key: "hrv",
+    label: "HRV (RMSSD)",
+    unit: "ms",
+    color: "#39a866",
+    kind: "line",
+    decimals: 1,
+  },
+  {
+    key: "ppg",
+    label: "PPG",
+    unit: "BPM",
+    color: "#2f6fbd",
+    kind: "line",
+    decimals: 1,
+  },
+  {
+    key: "eda",
+    label: "Electrodermal Activity (EDA)",
+    unit: "µS",
+    color: "#9b5bd6",
+    kind: "line",
+    decimals: 2,
+  },
+  {
+    key: "imu",
+    label: "Movement (IMU)",
+    unit: "a.u.",
+    color: "#f59e0b",
+    kind: "line",
+    decimals: 2,
+  },
+  {
+    key: "class",
+    label: "Class",
+    unit: "1-5",
+    color: "#ef4444",
+    kind: "class",
+    decimals: 0,
+  },
 ];
 
 function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
@@ -467,16 +497,14 @@ function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
   if (metric === "hrv") {
     return finite(
       asNumber(log.HRV) ??
-      asNumber(log.hrv) ??
-      asNumber(log.RMSSD) ??
-      asNumber(log.rmssd) ??
-      asNumber(log.HRV_RMSSD),
+        asNumber(log.hrv) ??
+        asNumber(log.RMSSD) ??
+        asNumber(log.rmssd) ??
+        asNumber(log.HRV_RMSSD),
     );
   }
   return finite(
-    asNumber(log.Class) ??
-    asNumber(log.class) ??
-    asNumber(log.emotionValue),
+    asNumber(log.Class) ?? asNumber(log.class) ?? asNumber(log.emotionValue),
   );
 }
 
@@ -485,7 +513,10 @@ function formatClassValue(value: number | null) {
 }
 
 function timeLabel(value: number) {
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function metricDomain(values: number[], metric: TimelineMetric) {
@@ -510,26 +541,39 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
         new Set(
           logs
             .map((log) => log.LoginSession)
-            .filter((value): value is number => value !== null && value !== undefined),
+            .filter(
+              (value): value is number => value !== null && value !== undefined,
+            ),
         ),
       ).sort((a, b) => a - b),
     [logs],
   );
-  const [session, setSession] = useState("all");
+  const defaultSession = sessionOptions.length ? String(sessionOptions[0]) : "";
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const activeSession =
+    selectedSession === null ||
+    !sessionOptions.map(String).includes(selectedSession)
+      ? defaultSession
+      : selectedSession;
+
   const visibleLogs = logs.filter(
-    (log) => session === "all" || String(log.LoginSession ?? "") === session,
+    (log) => String(log.LoginSession ?? "") === activeSession,
   );
   const timedLogs = visibleLogs
     .map((log) => ({ log, time: timestampMs(log.timestamp) }))
-    .filter((item): item is { log: WatchLog; time: number } => Number.isFinite(item.time));
+    .filter((item): item is { log: WatchLog; time: number } =>
+      Number.isFinite(item.time),
+    );
 
   return (
     <section className="sensor-timeline-panel">
       <div className="sensor-timeline-toolbar">
         <label>
           Login session
-          <select value={session} onChange={(event) => setSession(event.target.value)}>
-            <option value="all">All sessions</option>
+          <select
+            value={activeSession}
+            onChange={(event) => setSelectedSession(event.target.value)}
+          >
             {sessionOptions.map((value) => (
               <option key={value} value={String(value)}>
                 Session {value}
@@ -541,7 +585,11 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
       </div>
       <div className="sensor-timeline-stack">
         {TIMELINE_METRICS.map((metric) => (
-          <SensorTimelineChart key={metric.key} metric={metric} points={timedLogs} />
+          <SensorTimelineChart
+            key={metric.key}
+            metric={metric}
+            points={timedLogs}
+          />
         ))}
       </div>
     </section>
@@ -571,13 +619,17 @@ function SensorTimelineChart({
   );
   const values = points
     .map((point) => readMetricValue(point.log, metric.key))
-    .filter((value): value is number => value !== null && Number.isFinite(value));
+    .filter(
+      (value): value is number => value !== null && Number.isFinite(value),
+    );
   const domain = metricDomain(values, metric);
   const actStep = acts.length ? innerWidth / acts.length : innerWidth;
   const actTimeRanges = new Map(
     acts.map((act) => {
       const actTimes = points
-        .filter((point) => formatActLabel(point.log.act?.trim() || "Unknown") === act)
+        .filter(
+          (point) => formatActLabel(point.log.act?.trim() || "Unknown") === act,
+        )
         .map((point) => point.time);
       return [act, { min: Math.min(...actTimes), max: Math.max(...actTimes) }];
     }),
@@ -586,20 +638,37 @@ function SensorTimelineChart({
     const act = formatActLabel(log.act?.trim() || "Unknown");
     const actIndex = Math.max(0, acts.indexOf(act));
     const range = actTimeRanges.get(act);
-    const ratio = range && Number.isFinite(range.min) && Number.isFinite(range.max) && range.max > range.min
-      ? (time - range.min) / (range.max - range.min)
-      : 0.5;
-    return padding.left + actStep * actIndex + Math.max(0.12, Math.min(0.88, ratio)) * actStep;
+    const ratio =
+      range &&
+      Number.isFinite(range.min) &&
+      Number.isFinite(range.max) &&
+      range.max > range.min
+        ? (time - range.min) / (range.max - range.min)
+        : 0.5;
+    return (
+      padding.left +
+      actStep * actIndex +
+      Math.max(0.12, Math.min(0.88, ratio)) * actStep
+    );
   };
   const yForValue = (value: number) =>
-    padding.top + (domain.max - value) * (innerHeight / (domain.max - domain.min || 1));
+    padding.top +
+    (domain.max - value) * (innerHeight / (domain.max - domain.min || 1));
   const drawable = points
     .map((point) => {
       const value = readMetricValue(point.log, metric.key);
       return value === null ? null : { ...point, value };
     })
-    .filter((point): point is { log: WatchLog; time: number; value: number } => point !== null && Number.isFinite(point.value));
-  const path = smoothPath(drawable.map((point) => ({ x: xForActTimestamp(point.log, point.time), y: yForValue(point.value) })));
+    .filter(
+      (point): point is { log: WatchLog; time: number; value: number } =>
+        point !== null && Number.isFinite(point.value),
+    );
+  const path = smoothPath(
+    drawable.map((point) => ({
+      x: xForActTimestamp(point.log, point.time),
+      y: yForValue(point.value),
+    })),
+  );
   const classColors = ["#2f6fbd", "#39a866", "#a3a3a3", "#ef4444", "#111827"];
 
   return (
@@ -609,20 +678,49 @@ function SensorTimelineChart({
         <span>{metric.unit}</span>
       </div>
       <div className="sensor-timeline-svg-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric.label} by timestamp`}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={`${metric.label} by timestamp`}
+        >
           {domain.ticks.map((tick) => {
             const y = yForValue(tick);
             return (
               <g key={tick}>
-                <line className="chart-grid-line" x1={padding.left} x2={width - padding.right} y1={y} y2={y} />
-                <text className="chart-y-label" x={padding.left - 8} y={y + 4} textAnchor="end">
-                  {metric.kind === "class" ? Math.round(tick) : tick.toFixed(metric.decimals)}
+                <line
+                  className="chart-grid-line"
+                  x1={padding.left}
+                  x2={width - padding.right}
+                  y1={y}
+                  y2={y}
+                />
+                <text
+                  className="chart-y-label"
+                  x={padding.left - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                >
+                  {metric.kind === "class"
+                    ? Math.round(tick)
+                    : tick.toFixed(metric.decimals)}
                 </text>
               </g>
             );
           })}
-          <line className="chart-axis-line" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
-          <line className="chart-axis-line" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+          <line
+            className="chart-axis-line"
+            x1={padding.left}
+            x2={padding.left}
+            y1={padding.top}
+            y2={height - padding.bottom}
+          />
+          <line
+            className="chart-axis-line"
+            x1={padding.left}
+            x2={width - padding.right}
+            y1={height - padding.bottom}
+            y2={height - padding.bottom}
+          />
           {acts.map((act, index) => {
             const x = padding.left + actStep * index + actStep / 2;
             const range = actTimeRanges.get(act);
@@ -634,11 +732,27 @@ function SensorTimelineChart({
                 : "";
             return (
               <g key={act}>
-                <line className="act-minigame-line" x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} />
-                <text className="chart-x-label" x={x} y={height - 22} textAnchor="middle">
+                <line
+                  className="act-minigame-line"
+                  x1={x}
+                  x2={x}
+                  y1={padding.top}
+                  y2={height - padding.bottom}
+                />
+                <text
+                  className="chart-x-label"
+                  x={x}
+                  y={height - 22}
+                  textAnchor="middle"
+                >
                   {act}
                 </text>
-                <text className="chart-x-label chart-x-time-label" x={x} y={height - 8} textAnchor="middle">
+                <text
+                  className="chart-x-label chart-x-time-label"
+                  x={x}
+                  y={height - 8}
+                  textAnchor="middle"
+                >
                   {label}
                 </text>
               </g>
@@ -646,14 +760,28 @@ function SensorTimelineChart({
           })}
           {metric.kind === "line" ? (
             <>
-              <path className="sensor-timeline-line" d={path} fill="none" stroke={metric.color} />
+              <path
+                className="sensor-timeline-line"
+                d={path}
+                fill="none"
+                stroke={metric.color}
+              />
               {drawable.map((point, index) => (
-                <circle key={`${metric.key}-${point.time}-${index}`} cx={xForActTimestamp(point.log, point.time)} cy={yForValue(point.value)} r={2.4} fill={metric.color} />
+                <circle
+                  key={`${metric.key}-${point.time}-${index}`}
+                  cx={xForActTimestamp(point.log, point.time)}
+                  cy={yForValue(point.value)}
+                  r={2.4}
+                  fill={metric.color}
+                />
               ))}
             </>
           ) : (
             drawable.map((point, index) => {
-              const classValue = Math.max(1, Math.min(5, Math.round(point.value)));
+              const classValue = Math.max(
+                1,
+                Math.min(5, Math.round(point.value)),
+              );
               return (
                 <circle
                   key={`${metric.key}-${point.time}-${index}`}
