@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import type { Participant, SceneData, WatchLog } from "@/lib/supabase";
 import {
   BarPanel,
+  sortActs,
+  formatActLabel,
   DataTable,
   DonutPanel,
   MetricCard,
@@ -21,7 +23,11 @@ import {
 } from "./shared";
 
 function actPlayDuration(scenes: SceneData[]) {
-  const playDurations = scenes.map(sceneDuration).filter((value): value is number => value !== null && Number.isFinite(value));
+  const playDurations = scenes
+    .map(sceneDuration)
+    .filter(
+      (value): value is number => value !== null && Number.isFinite(value),
+    );
   if (!playDurations.length) return null;
   return playDurations.reduce((sum, duration) => sum + duration, 0);
 }
@@ -33,22 +39,28 @@ function actDurationMap(userScenes: SceneData[]) {
     scenesByAct.set(act, [...(scenesByAct.get(act) ?? []), scene]);
   });
 
-  return new Map(Array.from(scenesByAct, ([act, scenes]) => [act, actPlayDuration(scenes)]));
+  return new Map(
+    Array.from(scenesByAct, ([act, scenes]) => [act, actPlayDuration(scenes)]),
+  );
 }
 
 function sceneActsInDataOrder(scenes: SceneData[]) {
   const seen = new Set<string>();
   const acts: string[] = [];
   scenes.forEach((scene) => {
-    const act = scene.act?.trim();
+    const act = formatActLabel(scene.act?.trim() || "");
     if (!act || seen.has(act)) return;
     seen.add(act);
     acts.push(act);
   });
-  return acts;
+  return sortActs(acts);
 }
 
-function SchoolSummaryPanel({ data }: { data: { label: string; value: number }[] }) {
+function SchoolSummaryPanel({
+  data,
+}: {
+  data: { label: string; value: number }[];
+}) {
   return (
     <article className="school-summary-panel">
       <div className="school-summary-head">
@@ -90,10 +102,17 @@ export function OverviewPage({
   setFilters: (filters: Filters) => void;
   canExport: boolean;
 }) {
-  const availableActs = useMemo(() => sceneActsInDataOrder(sceneData), [sceneData]);
+  const availableActs = useMemo(
+    () => sceneActsInDataOrder(sceneData),
+    [sceneData],
+  );
 
-  const filteredParticipants = participants.filter((user) => matchesParticipant(user, filters));
-  const filteredUserIds = new Set(filteredParticipants.map((user) => user.userId));
+  const filteredParticipants = participants.filter((user) =>
+    matchesParticipant(user, filters),
+  );
+  const filteredUserIds = new Set(
+    filteredParticipants.map((user) => user.userId),
+  );
   const filteredScenes = sceneData.filter(
     (scene) =>
       scene.userId !== null &&
@@ -109,22 +128,34 @@ export function OverviewPage({
       withinDateRange(log.timestamp, filters),
   );
   const completedUserIds = new Set(filteredScenes.map((scene) => scene.userId));
-  const completionRate = filteredParticipants.length ? (completedUserIds.size / filteredParticipants.length) * 100 : 0;
+  const completionRate = filteredParticipants.length
+    ? (completedUserIds.size / filteredParticipants.length) * 100
+    : 0;
 
   const ageData = countBy(filteredParticipants, (user) => user.age);
   const genderData = countBy(filteredParticipants, (user) => user.gender);
   const schoolData = countBy(filteredParticipants, (user) => user.school);
 
   const summaryRows = filteredParticipants.map((user) => {
-    const userScenes = filteredScenes.filter((scene) => scene.userId === user.userId);
-    const userWatchLogs = filteredWatchLogs.filter((log) => log.userId === user.userId);
+    const userScenes = filteredScenes.filter(
+      (scene) => scene.userId === user.userId,
+    );
+    const userWatchLogs = filteredWatchLogs.filter(
+      (log) => log.userId === user.userId,
+    );
     const userLoginSessions = new Set(
       userWatchLogs
         .map((log) => log.LoginSession)
-        .filter((value): value is number => value !== null && value !== undefined),
+        .filter(
+          (value): value is number => value !== null && value !== undefined,
+        ),
     );
-    const userDurations = Array.from(actDurationMap(userScenes).values()).filter((value): value is number => value !== null);
-    const userTotalDuration = userDurations.length ? userDurations.reduce((sum, d) => sum + d, 0) : null;
+    const userDurations = Array.from(
+      actDurationMap(userScenes).values(),
+    ).filter((value): value is number => value !== null);
+    const userTotalDuration = userDurations.length
+      ? userDurations.reduce((sum, d) => sum + d, 0)
+      : null;
 
     return {
       User: participantName(user),
@@ -133,7 +164,10 @@ export function OverviewPage({
       School: user.school ?? "",
       "Login Sessions": userLoginSessions.size,
       "Total ACTs": availableActs.length,
-      "Play Duration": userTotalDuration === null ? "-" : `${formatNumber(userTotalDuration / 60, 1)} min`,
+      "Play Duration":
+        userTotalDuration === null
+          ? "-"
+          : `${formatNumber(userTotalDuration / 60, 1)} min`,
       "Latest Complete": latestDate(userScenes.map((scene) => scene.createdAt)),
     };
   });
@@ -149,9 +183,21 @@ export function OverviewPage({
       />
       <div className="page-body">
         <section className="metric-grid overview-metrics">
-          <MetricCard label="Participants" value={filteredParticipants.length} icon={UsersRound} />
-          <MetricCard label="Completed Users" value={completedUserIds.size} icon={CircleCheckBig} />
-          <MetricCard label="Completion Rate" value={formatPercent(completionRate)} icon={Gauge} />
+          <MetricCard
+            label="Participants"
+            value={filteredParticipants.length}
+            icon={UsersRound}
+          />
+          <MetricCard
+            label="Completed Users"
+            value={completedUserIds.size}
+            icon={CircleCheckBig}
+          />
+          <MetricCard
+            label="Completion Rate"
+            value={formatPercent(completionRate)}
+            icon={Gauge}
+          />
         </section>
         <section className="dashboard-layout overview-layout">
           <div className="main-stack">
@@ -163,8 +209,17 @@ export function OverviewPage({
             <div className="table-heading">
               <h2>Participant Progress Summary</h2>
             </div>
-            {!canExport ? <p className="hint">Viewer role can view data only. Export is available for admin and stuff.</p> : null}
-            <DataTable rows={summaryRows} exportFilename="participant-progress-summary.csv" canExport={canExport} />
+            {!canExport ? (
+              <p className="hint">
+                Viewer role can view data only. Export is available for admin
+                and stuff.
+              </p>
+            ) : null}
+            <DataTable
+              rows={summaryRows}
+              exportFilename="participant-progress-summary.csv"
+              canExport={canExport}
+            />
           </div>
         </section>
       </div>

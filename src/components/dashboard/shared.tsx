@@ -1,6 +1,19 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Clock3, Database, Download, Funnel, HeartPulse, RotateCcw, Search, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Download,
+  Funnel,
+  HeartPulse,
+  RotateCcw,
+  Search,
+  X,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Participant, SceneData, WatchLog } from "@/lib/supabase";
@@ -22,6 +35,33 @@ export const emptyFilters: Filters = {
   act: [],
 };
 
+export const PREDEFINED_ACT_ORDER = [
+  "minigame1",
+  "act1",
+  "minigame2",
+  "act2",
+  "minigame3",
+  "act3",
+  "act4",
+  "minigame4",
+  "act5",
+  "act6",
+];
+export function sortActs(acts: string[]) {
+  return [...acts].sort((a, b) => {
+    const aIndex = PREDEFINED_ACT_ORDER.indexOf(a.toLowerCase());
+    const bIndex = PREDEFINED_ACT_ORDER.indexOf(b.toLowerCase());
+    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+export function formatActLabel(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
 function csvEscape(value: unknown) {
   const text = value == null ? "" : String(value);
   return `"${text.replaceAll('"', '""')}"`;
@@ -32,7 +72,9 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   const headers = Object.keys(rows[0]);
   const body = [
     headers.map(csvEscape).join(","),
-    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+    ...rows.map((row) =>
+      headers.map((header) => csvEscape(row[header])).join(","),
+    ),
   ].join("\n");
   const blob = new Blob(["\uFEFF", body], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -52,11 +94,16 @@ export function asNumber(value: unknown) {
   return null;
 }
 
-export function withinDateRange(dateValue: string | null | undefined, filters: Filters) {
+export function withinDateRange(
+  dateValue: string | null | undefined,
+  filters: Filters,
+) {
   if (!dateValue) return !filters.from && !filters.to;
   const time = new Date(dateValue).getTime();
-  if (filters.from && time < new Date(`${filters.from}T00:00:00`).getTime()) return false;
-  if (filters.to && time > new Date(`${filters.to}T23:59:59`).getTime()) return false;
+  if (filters.from && time < new Date(`${filters.from}T00:00:00`).getTime())
+    return false;
+  if (filters.to && time > new Date(`${filters.to}T23:59:59`).getTime())
+    return false;
   return true;
 }
 
@@ -65,9 +112,18 @@ export function matchesParticipant(
   filters: Filters,
 ) {
   if (!user) return false;
-  if (filters.gender.length && !filters.gender.includes(String(user.gender ?? ""))) return false;
-  if (filters.age.length && !filters.age.includes(String(user.age ?? ""))) return false;
-  if (filters.school.length && !filters.school.includes(String(user.school ?? ""))) return false;
+  if (
+    filters.gender.length &&
+    !filters.gender.includes(String(user.gender ?? ""))
+  )
+    return false;
+  if (filters.age.length && !filters.age.includes(String(user.age ?? "")))
+    return false;
+  if (
+    filters.school.length &&
+    !filters.school.includes(String(user.school ?? ""))
+  )
+    return false;
 
   return true;
 }
@@ -77,9 +133,14 @@ export function uniqueValues<T>(items: T[], getValue: (item: T) => unknown) {
     new Set(
       items
         .map(getValue)
-        .filter((value): value is string | number => value !== null && value !== undefined && value !== ""),
+        .filter(
+          (value): value is string | number =>
+            value !== null && value !== undefined && value !== "",
+        ),
     ),
-  ).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  ).sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true }),
+  );
 }
 
 export function countBy<T>(items: T[], getValue: (item: T) => unknown) {
@@ -88,13 +149,15 @@ export function countBy<T>(items: T[], getValue: (item: T) => unknown) {
     const key = String(getValue(item) ?? "Unknown");
     counts.set(key, (counts.get(key) ?? 0) + 1);
   });
-  return Array.from(counts, ([label, value]) => ({ label, value })).sort((a, b) =>
-    a.label.localeCompare(b.label, undefined, { numeric: true }),
+  return Array.from(counts, ([label, value]) => ({ label, value })).sort(
+    (a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }),
   );
 }
 
 function toggleFilterValue(values: string[], value: string) {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value];
 }
 
 function filterSummary(values: string[], placeholder = "All") {
@@ -123,7 +186,11 @@ function MultiCheckboxFilter({
         </summary>
         <div className="multi-filter-menu">
           <label className="multi-filter-option">
-            <input type="checkbox" checked={!values.length} onChange={() => onChange([])} />
+            <input
+              type="checkbox"
+              checked={!values.length}
+              onChange={() => onChange([])}
+            />
             <span>All</span>
           </label>
           {options.map((option) => {
@@ -164,7 +231,11 @@ export function formatPercent(value: number) {
 
 export function participantName(user: Participant | undefined) {
   if (!user) return "Unknown user";
-  return `${user.name ?? ""} ${user.lastname ?? ""}`.trim() || user.email || `User ${user.userId}`;
+  return (
+    `${user.name ?? ""} ${user.lastname ?? ""}`.trim() ||
+    user.email ||
+    `User ${user.userId}`
+  );
 }
 
 export function sceneScore(scene: SceneData) {
@@ -176,7 +247,9 @@ export function sceneStars(scene: SceneData) {
 }
 
 export function sceneDuration(scene: SceneData) {
-  return asNumber(scene.details?.playDuration) ?? asNumber(scene.details?.timePlayed);
+  return (
+    asNumber(scene.details?.playDuration) ?? asNumber(scene.details?.timePlayed)
+  );
 }
 
 export function sceneResult(scene: SceneData) {
@@ -217,16 +290,42 @@ export function FilterPanel({
       <div className="filter-grid">
         <label>
           Date from
-          <input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(event) =>
+              setFilters({ ...filters, from: event.target.value })
+            }
+          />
         </label>
         <label>
           Date to
-          <input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(event) =>
+              setFilters({ ...filters, to: event.target.value })
+            }
+          />
         </label>
-        <MultiCheckboxFilter label="Gender" values={filters.gender} options={genders} onChange={(gender) => setFilters({ ...filters, gender })} />
-        <MultiCheckboxFilter label="Age" values={filters.age} options={ages} onChange={(age) => setFilters({ ...filters, age })} />
-        <MultiCheckboxFilter label="School" values={filters.school} options={schools} onChange={(school) => setFilters({ ...filters, school })} />
-
+        <MultiCheckboxFilter
+          label="Gender"
+          values={filters.gender}
+          options={genders}
+          onChange={(gender) => setFilters({ ...filters, gender })}
+        />
+        <MultiCheckboxFilter
+          label="Age"
+          values={filters.age}
+          options={ages}
+          onChange={(age) => setFilters({ ...filters, age })}
+        />
+        <MultiCheckboxFilter
+          label="School"
+          values={filters.school}
+          options={schools}
+          onChange={(school) => setFilters({ ...filters, school })}
+        />
       </div>
       <button className="text-button" onClick={() => setFilters(emptyFilters)}>
         <RotateCcw size={14} />
@@ -249,9 +348,15 @@ export function PageHeader({
   setFilters?: (filters: Filters) => void;
   participants?: Participant[];
 }) {
-  const genders = participants ? uniqueValues(participants, (user) => user.gender) : [];
-  const ages = participants ? uniqueValues(participants, (user) => user.age) : [];
-  const schools = participants ? uniqueValues(participants, (user) => user.school) : [];
+  const genders = participants
+    ? uniqueValues(participants, (user) => user.gender)
+    : [];
+  const ages = participants
+    ? uniqueValues(participants, (user) => user.age)
+    : [];
+  const schools = participants
+    ? uniqueValues(participants, (user) => user.school)
+    : [];
 
   const hasActiveFilters = Boolean(
     filters &&
@@ -270,7 +375,10 @@ export function PageHeader({
           <p>{description}</p>
         </div>
         {hasActiveFilters && setFilters ? (
-          <button className="header-filter-reset" onClick={() => setFilters(emptyFilters)}>
+          <button
+            className="header-filter-reset"
+            onClick={() => setFilters(emptyFilters)}
+          >
             <RotateCcw size={13} />
             Reset filters
           </button>
@@ -284,7 +392,9 @@ export function PageHeader({
             <input
               type="date"
               value={filters.from}
-              onChange={(event) => setFilters({ ...filters, from: event.target.value })}
+              onChange={(event) =>
+                setFilters({ ...filters, from: event.target.value })
+              }
             />
           </div>
           <div className="header-filter-item">
@@ -292,12 +402,29 @@ export function PageHeader({
             <input
               type="date"
               value={filters.to}
-              onChange={(event) => setFilters({ ...filters, to: event.target.value })}
+              onChange={(event) =>
+                setFilters({ ...filters, to: event.target.value })
+              }
             />
           </div>
-          <MultiCheckboxFilter label="Gender" values={filters.gender} options={genders} onChange={(gender) => setFilters({ ...filters, gender })} />
-          <MultiCheckboxFilter label="Age" values={filters.age} options={ages} onChange={(age) => setFilters({ ...filters, age })} />
-          <MultiCheckboxFilter label="School" values={filters.school} options={schools} onChange={(school) => setFilters({ ...filters, school })} />
+          <MultiCheckboxFilter
+            label="Gender"
+            values={filters.gender}
+            options={genders}
+            onChange={(gender) => setFilters({ ...filters, gender })}
+          />
+          <MultiCheckboxFilter
+            label="Age"
+            values={filters.age}
+            options={ages}
+            onChange={(age) => setFilters({ ...filters, age })}
+          />
+          <MultiCheckboxFilter
+            label="School"
+            values={filters.school}
+            options={schools}
+            onChange={(school) => setFilters({ ...filters, school })}
+          />
 
           {/* {setFilters ? (
             <button
@@ -315,7 +442,13 @@ export function PageHeader({
   );
 }
 
-export function Header({ title, description }: { title: string; description: string }) {
+export function Header({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <header className="page-header">
       <div>
@@ -326,7 +459,15 @@ export function Header({ title, description }: { title: string; description: str
   );
 }
 
-export function MetricCard({ label, value, icon: Icon }: { label: string; value: string | number; icon?: LucideIcon }) {
+export function MetricCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  icon?: LucideIcon;
+}) {
   return (
     <article className={`metric-card ${Icon ? "with-icon" : ""}`}>
       {Icon ? (
@@ -342,7 +483,13 @@ export function MetricCard({ label, value, icon: Icon }: { label: string; value:
   );
 }
 
-export function SummaryPanel({ title, items }: { title: string; items: { label: string; value: string | number }[] }) {
+export function SummaryPanel({
+  title,
+  items,
+}: {
+  title: string;
+  items: { label: string; value: string | number }[];
+}) {
   const icons = [CheckCircle2, Database, Clock3, HeartPulse];
   return (
     <article className="summary-panel">
@@ -367,7 +514,13 @@ export function SummaryPanel({ title, items }: { title: string; items: { label: 
   );
 }
 
-export function RecordList({ title, rows }: { title: string; rows: Record<string, unknown>[] }) {
+export function RecordList({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Record<string, unknown>[];
+}) {
   return (
     <article className="record-list">
       <h3>{title}</h3>
@@ -375,9 +528,12 @@ export function RecordList({ title, rows }: { title: string; rows: Record<string
         {rows.length ? (
           rows.map((row, index) => (
             <div className="record-item" key={index}>
-              <strong>{String(row.User ?? row.ACT ?? `Record ${index + 1}`)}</strong>
+              <strong>
+                {String(row.User ?? row.ACT ?? `Record ${index + 1}`)}
+              </strong>
               <span>
-                ACT {String(row.ACT ?? "-")} · Score {String(row.Score ?? "-")} · {String(row.Completed ?? "-")}
+                ACT {String(row.ACT ?? "-")} · Score {String(row.Score ?? "-")}{" "}
+                · {String(row.Completed ?? "-")}
               </span>
             </div>
           ))
@@ -389,15 +545,25 @@ export function RecordList({ title, rows }: { title: string; rows: Record<string
   );
 }
 
-export function SensorCard({ title, values }: { title: string; values: number[] }) {
-  const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+export function SensorCard({
+  title,
+  values,
+}: {
+  title: string;
+  values: number[];
+}) {
+  const avg = values.length
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : 0;
   return (
     <article className="sensor-card">
       <h3>{title}</h3>
       <div className="sensor-values">
         <span>
           <small>Min</small>
-          <strong>{values.length ? Math.min(...values).toFixed(2) : "-"}</strong>
+          <strong>
+            {values.length ? Math.min(...values).toFixed(2) : "-"}
+          </strong>
         </span>
         <span>
           <small>Avg</small>
@@ -405,7 +571,9 @@ export function SensorCard({ title, values }: { title: string; values: number[] 
         </span>
         <span>
           <small>Max</small>
-          <strong>{values.length ? Math.max(...values).toFixed(2) : "-"}</strong>
+          <strong>
+            {values.length ? Math.max(...values).toFixed(2) : "-"}
+          </strong>
         </span>
       </div>
     </article>
@@ -425,7 +593,9 @@ export function BarPanel({
 }) {
   const max = Math.max(1, ...data.map((item) => item.value));
   return (
-    <article className={`chart-panel ${wide ? "wide" : ""} ${vertical ? "vertical" : ""}`}>
+    <article
+      className={`chart-panel ${wide ? "wide" : ""} ${vertical ? "vertical" : ""}`}
+    >
       <h3>{title}</h3>
       <div className="bar-chart-scroll">
         <div className="bar-chart">
@@ -434,7 +604,13 @@ export function BarPanel({
               <div className="bar-item" key={item.label}>
                 <span>{item.label}</span>
                 <div>
-                  <i style={vertical ? { height: `${(item.value / max) * 100}%` } : { width: `${(item.value / max) * 100}%` }} />
+                  <i
+                    style={
+                      vertical
+                        ? { height: `${(item.value / max) * 100}%` }
+                        : { width: `${(item.value / max) * 100}%` }
+                    }
+                  />
                 </div>
                 <b>{item.value}</b>
               </div>
@@ -466,7 +642,9 @@ export function DonutPanel({
     offset = end;
     return `${colors[index % colors.length]} ${start}% ${end}%`;
   });
-  const background = total ? `conic-gradient(${segments.join(", ")})` : "#edf1f5";
+  const background = total
+    ? `conic-gradient(${segments.join(", ")})`
+    : "#edf1f5";
   return (
     <article className="donut-panel">
       {Icon || title ? (
@@ -538,7 +716,9 @@ export function DataTable({
   };
 
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
+    const filtered = rows.filter((row) =>
+      JSON.stringify(row).toLowerCase().includes(query.toLowerCase()),
+    );
     if (!sortKey) return filtered;
 
     return [...filtered].sort((a, b) => {
@@ -549,8 +729,14 @@ export function DataTable({
       if (valA == null || valA === "-" || valA === "") return 1;
       if (valB == null || valB === "-" || valB === "") return -1;
 
-      const numA = typeof valA === "number" ? valA : Number(String(valA).replace(/[%,\s]/g, ""));
-      const numB = typeof valB === "number" ? valB : Number(String(valB).replace(/[%,\s]/g, ""));
+      const numA =
+        typeof valA === "number"
+          ? valA
+          : Number(String(valA).replace(/[%,\s]/g, ""));
+      const numB =
+        typeof valB === "number"
+          ? valB
+          : Number(String(valB).replace(/[%,\s]/g, ""));
 
       if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
         return sortDirection === "asc" ? numA - numB : numB - numA;
@@ -569,7 +755,11 @@ export function DataTable({
       <div className="table-action-row">
         <div className="table-tools">
           <Search size={16} />
-          <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input
+            placeholder="Search..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
           <button
             className="search-clear-button"
             disabled={!query}
@@ -635,7 +825,10 @@ export function DataTable({
               ))
             ) : (
               <tr>
-                <td colSpan={Math.max(headers.length, 1)} className="empty-state">
+                <td
+                  colSpan={Math.max(headers.length, 1)}
+                  className="empty-state"
+                >
                   No data
                 </td>
               </tr>
@@ -652,12 +845,16 @@ export function estimateAverageDuration(logs: WatchLog[]) {
   logs.forEach((log) => {
     if (!log.userId || !log.act || !log.timestamp) return;
     const key = `${log.userId}:${log.act}`;
-    grouped.set(key, [...(grouped.get(key) ?? []), new Date(log.timestamp).getTime()]);
+    grouped.set(key, [
+      ...(grouped.get(key) ?? []),
+      new Date(log.timestamp).getTime(),
+    ]);
   });
   const durations = Array.from(grouped.values())
     .map((times) => (Math.max(...times) - Math.min(...times)) / 60000)
     .filter((duration) => Number.isFinite(duration) && duration > 0);
   if (!durations.length) return "-";
-  const avg = durations.reduce((sum, duration) => sum + duration, 0) / durations.length;
+  const avg =
+    durations.reduce((sum, duration) => sum + duration, 0) / durations.length;
   return `${avg.toFixed(1)} min`;
 }

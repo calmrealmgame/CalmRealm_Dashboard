@@ -5,6 +5,8 @@ import { useState } from "react";
 import type { Participant, WatchLog } from "@/lib/supabase";
 import {
   DataTable,
+  sortActs,
+  formatActLabel,
   MetricCard,
   PageHeader,
   asNumber,
@@ -58,14 +60,20 @@ type UserSensorSummary = SignalAverage & {
 };
 
 function normalizeSex(value: string | null | undefined): SexKey {
-  const text = String(value ?? "").trim().toLowerCase();
-  if (["female", "f", "woman", "girl", "หญิง", "ผู้หญิง"].includes(text)) return "female";
-  if (["male", "m", "man", "boy", "ชาย", "ผู้ชาย"].includes(text)) return "male";
+  const text = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (["female", "f", "woman", "girl", "หญิง", "ผู้หญิง"].includes(text))
+    return "female";
+  if (["male", "m", "man", "boy", "ชาย", "ผู้ชาย"].includes(text))
+    return "male";
   return "other";
 }
 
 function finiteAverage(values: (number | null)[]) {
-  const finiteValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  const finiteValues = values.filter(
+    (value): value is number => value !== null && Number.isFinite(value),
+  );
   return average(finiteValues);
 }
 
@@ -74,7 +82,9 @@ function numericLeaves(value: unknown): number[] {
   if (direct !== null && Number.isFinite(direct)) return [direct];
   if (Array.isArray(value)) return value.flatMap(numericLeaves);
   if (value && typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).flatMap(numericLeaves);
+    return Object.values(value as Record<string, unknown>).flatMap(
+      numericLeaves,
+    );
   }
   return [];
 }
@@ -94,7 +104,9 @@ function formatDuration(value: number | null) {
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "-";
   const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString() : "-";
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toLocaleString()
+    : "-";
 }
 
 function formatLoginSession(value: number | null | undefined) {
@@ -112,29 +124,24 @@ function smoothPath(points: { x: number; y: number }[]) {
     const previous = points[index - 1] ?? current;
     const following = points[index + 2] ?? next;
     commands.push(
-      `C ${current.x + (next.x - previous.x) / 6} ${current.y + (next.y - previous.y) / 6}, ${next.x - (following.x - current.x) / 6
+      `C ${current.x + (next.x - previous.x) / 6} ${current.y + (next.y - previous.y) / 6}, ${
+        next.x - (following.x - current.x) / 6
       } ${next.y - (following.y - current.y) / 6}, ${next.x} ${next.y}`,
     );
   }
   return commands.join(" ");
 }
 
-function formatActLabel(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return trimmed;
-  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
-}
-
 function watchActsInDataOrder(logs: WatchLog[]) {
   const seen = new Set<string>();
   const acts: string[] = [];
   logs.forEach((log) => {
-    const act = log.act?.trim();
+    const act = formatActLabel(log.act?.trim() || "");
     if (!act || seen.has(act)) return;
     seen.add(act);
     acts.push(act);
   });
-  return acts;
+  return sortActs(acts);
 }
 
 export function WatchPage({
@@ -157,28 +164,39 @@ export function WatchPage({
   const filteredLogs = watchLogs.filter((log) => {
     const user = log.userId == null ? undefined : userById.get(log.userId);
     if (!matchesParticipant(user, filters)) return false;
-    if (filters.act.length && !filters.act.includes(String(log.act ?? ""))) return false;
+    if (filters.act.length && !filters.act.includes(String(log.act ?? "")))
+      return false;
     return withinDateRange(log.timestamp, filters);
   });
   const sensorLogs = watchLogs.filter((log) => {
     const user = log.userId == null ? undefined : userById.get(log.userId);
     if (!matchesParticipant(user, filters)) return false;
-    if (filters.act.length && !filters.act.includes(String(log.act ?? ""))) return false;
+    if (filters.act.length && !filters.act.includes(String(log.act ?? "")))
+      return false;
     return withinDateRange(log.timestamp, filters);
   });
 
   const sensorSummary = buildActSensorSummary(participants, sensorLogs, acts);
-  const watchParticipants = new Set(filteredLogs.map((log) => log.userId).filter(Boolean));
+  const watchParticipants = new Set(
+    filteredLogs.map((log) => log.userId).filter(Boolean),
+  );
   const selectedUser =
     selectedUserId === null
       ? null
-      : sensorSummary.userSummaries.find((summary) => summary.userId === selectedUserId) ?? null;
+      : (sensorSummary.userSummaries.find(
+          (summary) => summary.userId === selectedUserId,
+        ) ?? null);
 
-  const selectedUserSamples = selectedUserId === null ? [] : buildWatchSampleRows(filteredLogs, userById, selectedUserId);
+  const selectedUserSamples =
+    selectedUserId === null
+      ? []
+      : buildWatchSampleRows(filteredLogs, userById, selectedUserId);
   const selectedUserActSummaries =
     selectedUserId === null
       ? []
-      : sensorSummary.summaries.filter((summary) => summary.userId === selectedUserId);
+      : sensorSummary.summaries.filter(
+          (summary) => summary.userId === selectedUserId,
+        );
 
   return (
     <>
@@ -192,7 +210,11 @@ export function WatchPage({
       <div className="page-body">
         {selectedUser ? (
           <>
-            <button className="back-button" onClick={() => setSelectedUserId(null)} type="button">
+            <button
+              className="back-button"
+              onClick={() => setSelectedUserId(null)}
+              type="button"
+            >
               <ArrowLeft size={16} />
               Back to Watch Summary
             </button>
@@ -201,7 +223,9 @@ export function WatchPage({
                 <span>Participant</span>
                 <strong>{selectedUser.user}</strong>
                 <small>
-                  {selectedUser.age ?? "-"} years · {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)?.label ?? selectedUser.sex}
+                  {selectedUser.age ?? "-"} years ·{" "}
+                  {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)
+                    ?.label ?? selectedUser.sex}
                   {selectedUser.school ? ` · ${selectedUser.school}` : ""}
                 </small>
               </div>
@@ -218,23 +242,42 @@ export function WatchPage({
                 <div className="table-heading">
                   <h2>Watch Samples</h2>
                 </div>
-                {!canExport ? <p className="hint">Viewer role can view data only. Export is available for admin and stuff.</p> : null}
-                <DataTable rows={selectedUserSamples} exportFilename={`watch-samples-${selectedUser.userId}.csv`} canExport={canExport} />
+                {!canExport ? (
+                  <p className="hint">
+                    Viewer role can view data only. Export is available for
+                    admin and stuff.
+                  </p>
+                ) : null}
+                <DataTable
+                  rows={selectedUserSamples}
+                  exportFilename={`watch-samples-${selectedUser.userId}.csv`}
+                  canExport={canExport}
+                />
               </div>
             </section>
           </>
         ) : (
           <>
             <section className="metric-grid watch-metrics">
-              <MetricCard label="Watch Participants" value={watchParticipants.size} icon={UsersRound} />
+              <MetricCard
+                label="Watch Participants"
+                value={watchParticipants.size}
+                icon={UsersRound}
+              />
             </section>
             <div className="table-heading watch-summary-heading">
               <div>
                 <h2>Watch Summary</h2>
-                <p>One participant per row. Select a participant to view personal progress, sensor charts, and samples.</p>
+                <p>
+                  One participant per row. Select a participant to view personal
+                  progress, sensor charts, and samples.
+                </p>
               </div>
             </div>
-            <WatchSummaryTable summaries={sensorSummary.userSummaries} onSelect={setSelectedUserId} />
+            <WatchSummaryTable
+              summaries={sensorSummary.userSummaries}
+              onSelect={setSelectedUserId}
+            />
           </>
         )}
       </div>
@@ -254,17 +297,23 @@ function buildSummaryTableRow(summary: UserSensorSummary) {
   };
 }
 
-function buildWatchSampleRows(logs: WatchLog[], userById: Map<number, Participant>, selectedUserId?: number) {
+function buildWatchSampleRows(
+  logs: WatchLog[],
+  userById: Map<number, Participant>,
+  selectedUserId?: number,
+) {
   return logs
-    .filter((log) => selectedUserId === undefined || log.userId === selectedUserId)
+    .filter(
+      (log) => selectedUserId === undefined || log.userId === selectedUserId,
+    )
     .map((log) => {
       const user = log.userId == null ? undefined : userById.get(log.userId);
       return {
-        Name: user ? participantName(user) : log.userId ?? "",
+        Name: user ? participantName(user) : (log.userId ?? ""),
         Age: user?.age ?? "",
         Gender: user?.gender ?? "",
         School: user?.school ?? "",
-        ACT: log.act ?? "",
+        ACT: formatActLabel(log.act ?? ""),
         PPG: log.PPG ?? "",
         EDA: log.EDA ?? "",
         IMU: asNumber(log.IMU) ?? JSON.stringify(log.IMU ?? ""),
@@ -282,7 +331,9 @@ function WatchSummaryTable({
 }) {
   const [query, setQuery] = useState("");
   const visibleSummaries = summaries.filter((summary) =>
-    JSON.stringify(buildSummaryTableRow(summary)).toLowerCase().includes(query.toLowerCase()),
+    JSON.stringify(buildSummaryTableRow(summary))
+      .toLowerCase()
+      .includes(query.toLowerCase()),
   );
 
   return (
@@ -290,7 +341,11 @@ function WatchSummaryTable({
       <div className="table-action-row">
         <div className="table-tools">
           <Search size={16} />
-          <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input
+            placeholder="Search..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
           <span>{visibleSummaries.length} rows</span>
         </div>
       </div>
@@ -315,7 +370,11 @@ function WatchSummaryTable({
                 return (
                   <tr key={summary.userId}>
                     <td>
-                      <button className="link-button" onClick={() => onSelect(summary.userId)} type="button">
+                      <button
+                        className="link-button"
+                        onClick={() => onSelect(summary.userId)}
+                        type="button"
+                      >
                         {row.User}
                       </button>
                     </td>
@@ -326,7 +385,12 @@ function WatchSummaryTable({
                     <td>{row["Avg EDA"]}</td>
                     <td>{row["Avg IMU"]}</td>
                     <td>
-                      <button className="icon-action-button" onClick={() => onSelect(summary.userId)} title="View participant" type="button">
+                      <button
+                        className="icon-action-button"
+                        onClick={() => onSelect(summary.userId)}
+                        title="View participant"
+                        type="button"
+                      >
                         <Eye size={15} />
                       </button>
                     </td>
@@ -347,7 +411,11 @@ function WatchSummaryTable({
   );
 }
 
-function buildActSensorSummary(participants: Participant[], logs: WatchLog[], allActs: string[]) {
+function buildActSensorSummary(
+  participants: Participant[],
+  logs: WatchLog[],
+  allActs: string[],
+) {
   const userById = new Map(participants.map((user) => [user.userId, user]));
   const logsByUserAct = new Map<string, WatchLog[]>();
   const logsByUser = new Map<number, WatchLog[]>();
@@ -362,7 +430,10 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
     if (user.age == null) {
       missingAgeCount += 1;
     }
-    if (Array.isArray(log.IMU) || (log.IMU && typeof log.IMU === "object" && asNumber(log.IMU) === null)) {
+    if (
+      Array.isArray(log.IMU) ||
+      (log.IMU && typeof log.IMU === "object" && asNumber(log.IMU) === null)
+    ) {
       imuComplexCount += 1;
     }
     const act = log.act?.trim() || "Unknown";
@@ -371,75 +442,100 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
     logsByUser.set(log.userId, [...(logsByUser.get(log.userId) ?? []), log]);
   });
 
-  if (missingAgeCount) warnings.add(`พบ log ${missingAgeCount} รายการที่ไม่มีอายุ แต่ยังนำค่า sensor ไปคำนวณในกลุ่มอายุ All`);
-  if (imuComplexCount) warnings.add(`พบ IMU แบบ object/array ${imuComplexCount} รายการ จึงใช้ค่าเฉลี่ยของตัวเลขภายในรายการนั้น`);
-
-  const summaries: ActSensorSummary[] = Array.from(logsByUserAct, ([key, userLogs]) => {
-    const [userIdText, ...actParts] = key.split(":");
-    const userId = Number(userIdText);
-    const act = actParts.join(":");
-    const user = userById.get(userId);
-    return {
-      userId,
-      user: participantName(user),
-      age: user?.age ?? null,
-      sex: normalizeSex(user?.gender),
-      act,
-      duration: estimateGroupAverageDurationValue(userLogs),
-      ppg: finiteAverage(userLogs.map((log) => asNumber(log.PPG))),
-      eda: finiteAverage(userLogs.map((log) => asNumber(log.EDA))),
-      imu: finiteAverage(userLogs.map((log) => imuAverage(log.IMU))),
-    };
-  });
-
-  const userSummaries: UserSensorSummary[] = Array.from(logsByUser, ([userId, userLogs]) => {
-    const user = userById.get(userId);
-    const playedActs = new Set(userLogs.map((log) => log.act?.trim()).filter(Boolean)).size;
-    const loginSessions = new Set(
-      userLogs
-        .map((log) => log.LoginSession)
-        .filter((value): value is number => value !== null && value !== undefined),
+  if (missingAgeCount)
+    warnings.add(
+      `พบ log ${missingAgeCount} รายการที่ไม่มีอายุ แต่ยังนำค่า sensor ไปคำนวณในกลุ่มอายุ All`,
     );
-    const latestLog = [...userLogs].sort((a, b) => {
-      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      return timeB - timeA;
-    })[0];
-    const latestSample = userLogs
-      .map((log) => log.timestamp)
-      .filter((value): value is string => Boolean(value))
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
-    return {
-      userId,
-      user: participantName(user),
-      age: user?.age ?? null,
-      sex: normalizeSex(user?.gender),
-      school: user?.school ?? null,
-      playedActs,
-      totalActs: allActs.length,
-      completionPercent: allActs.length ? (playedActs / allActs.length) * 100 : 0,
-      duration: estimateGroupAverageDurationValue(userLogs),
-      latestSample,
-      latestLoginSession: latestLog?.LoginSession ?? null,
-      loginSessionCount: loginSessions.size,
-      sampleCount: userLogs.length,
-      ppg: finiteAverage(userLogs.map((log) => asNumber(log.PPG))),
-      imu: finiteAverage(userLogs.map((log) => imuAverage(log.IMU))),
-      eda: finiteAverage(userLogs.map((log) => asNumber(log.EDA))),
-    };
-  });
+  if (imuComplexCount)
+    warnings.add(
+      `พบ IMU แบบ object/array ${imuComplexCount} รายการ จึงใช้ค่าเฉลี่ยของตัวเลขภายในรายการนั้น`,
+    );
+
+  const summaries: ActSensorSummary[] = Array.from(
+    logsByUserAct,
+    ([key, userLogs]) => {
+      const [userIdText, ...actParts] = key.split(":");
+      const userId = Number(userIdText);
+      const act = actParts.join(":");
+      const user = userById.get(userId);
+      return {
+        userId,
+        user: participantName(user),
+        age: user?.age ?? null,
+        sex: normalizeSex(user?.gender),
+        act,
+        duration: estimateGroupAverageDurationValue(userLogs),
+        ppg: finiteAverage(userLogs.map((log) => asNumber(log.PPG))),
+        eda: finiteAverage(userLogs.map((log) => asNumber(log.EDA))),
+        imu: finiteAverage(userLogs.map((log) => imuAverage(log.IMU))),
+      };
+    },
+  );
+
+  const userSummaries: UserSensorSummary[] = Array.from(
+    logsByUser,
+    ([userId, userLogs]) => {
+      const user = userById.get(userId);
+      const playedActs = new Set(
+        userLogs.map((log) => log.act?.trim()).filter(Boolean),
+      ).size;
+      const loginSessions = new Set(
+        userLogs
+          .map((log) => log.LoginSession)
+          .filter(
+            (value): value is number => value !== null && value !== undefined,
+          ),
+      );
+      const latestLog = [...userLogs].sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      })[0];
+      const latestSample =
+        userLogs
+          .map((log) => log.timestamp)
+          .filter((value): value is string => Boolean(value))
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ??
+        null;
+      return {
+        userId,
+        user: participantName(user),
+        age: user?.age ?? null,
+        sex: normalizeSex(user?.gender),
+        school: user?.school ?? null,
+        playedActs,
+        totalActs: allActs.length,
+        completionPercent: allActs.length
+          ? (playedActs / allActs.length) * 100
+          : 0,
+        duration: estimateGroupAverageDurationValue(userLogs),
+        latestSample,
+        latestLoginSession: latestLog?.LoginSession ?? null,
+        loginSessionCount: loginSessions.size,
+        sampleCount: userLogs.length,
+        ppg: finiteAverage(userLogs.map((log) => asNumber(log.PPG))),
+        imu: finiteAverage(userLogs.map((log) => imuAverage(log.IMU))),
+        eda: finiteAverage(userLogs.map((log) => asNumber(log.EDA))),
+      };
+    },
+  );
 
   const rows = userSummaries
     .sort((a, b) => a.user.localeCompare(b.user, undefined, { numeric: true }))
     .map((summary) => ({
       User: summary.user,
       Age: summary.age ?? "",
-      Gender: DEMOGRAPHIC_SEXES.find((sex) => sex.key === summary.sex)?.label ?? summary.sex,
+      Gender:
+        DEMOGRAPHIC_SEXES.find((sex) => sex.key === summary.sex)?.label ??
+        summary.sex,
       School: summary.school ?? "",
       "Login Sessions": summary.loginSessionCount,
       "Play Duration": formatDuration(summary.duration),
       "Completed Data": formatPercent(summary.completionPercent),
-      Status: summary.totalActs > 0 && summary.playedActs >= summary.totalActs ? "Complete" : "Incomplete",
+      Status:
+        summary.totalActs > 0 && summary.playedActs >= summary.totalActs
+          ? "Complete"
+          : "Incomplete",
       "Avg PPG": formatSignal(summary.ppg, 1),
       "Avg IMU": formatSignal(summary.imu, 2),
       "Avg EDA": formatSignal(summary.eda, 2),
@@ -455,7 +551,9 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
 
 function estimateGroupAverageDurationValue(logs: WatchLog[]) {
   const times = logs
-    .map((log) => (log.timestamp ? new Date(log.timestamp).getTime() : Number.NaN))
+    .map((log) =>
+      log.timestamp ? new Date(log.timestamp).getTime() : Number.NaN,
+    )
     .filter(Number.isFinite);
   if (times.length < 2) return null;
   const duration = (Math.max(...times) - Math.min(...times)) / 60000;
@@ -476,9 +574,14 @@ const STAT_LINES = [
   { key: "min", label: "MIN", color: "#57d66d" },
 ] as const;
 
-function aggregateActStats(summaries: ActSensorSummary[], signalKey: SignalKey) {
+function aggregateActStats(
+  summaries: ActSensorSummary[],
+  signalKey: SignalKey,
+) {
   const filtered = summaries;
-  const acts = Array.from(new Set(filtered.map((summary) => summary.act)));
+  const acts = sortActs(
+    Array.from(new Set(filtered.map((summary) => summary.act))),
+  );
 
   const points = acts.map((act) => {
     const values = filtered
@@ -498,7 +601,9 @@ function aggregateActStats(summaries: ActSensorSummary[], signalKey: SignalKey) 
 }
 
 function signalDomain(points: ActChartStats[]) {
-  const values = points.flatMap((point) => [point.min, point.avg, point.max]).filter((value): value is number => value !== null);
+  const values = points
+    .flatMap((point) => [point.min, point.avg, point.max])
+    .filter((value): value is number => value !== null);
   if (!values.length) return { min: 0, max: 1, ticks: [0, 0.25, 0.5, 0.75, 1] };
 
   const rawMin = Math.min(...values);
@@ -510,11 +615,20 @@ function signalDomain(points: ActChartStats[]) {
   return {
     min,
     max,
-    ticks: Array.from({ length: 5 }, (_, index) => min + ((max - min) / 4) * index),
+    ticks: Array.from(
+      { length: 5 },
+      (_, index) => min + ((max - min) / 4) * index,
+    ),
   };
 }
 
-function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorSummary[]; compact?: boolean }) {
+function ActSensorCharts({
+  summaries,
+  compact = false,
+}: {
+  summaries: ActSensorSummary[];
+  compact?: boolean;
+}) {
   const [tooltip, setTooltip] = useState<{
     left: number;
     top: number;
@@ -524,11 +638,15 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
   } | null>(null);
   const height = compact ? 260 : 310;
   const chartWidth = compact ? 680 : 1180;
-  const padding = compact ? { top: 18, right: 20, bottom: 62, left: 42 } : { top: 22, right: 24, bottom: 72, left: 44 };
+  const padding = compact
+    ? { top: 18, right: 20, bottom: 62, left: 42 }
+    : { top: 22, right: 24, bottom: 72, left: 44 };
   const innerHeight = height - padding.top - padding.bottom;
 
   return (
-    <section className={compact ? "act-sensor-panel compact" : "act-sensor-panel"}>
+    <section
+      className={compact ? "act-sensor-panel compact" : "act-sensor-panel"}
+    >
       <div className="act-sensor-toolbar">
         <div className="act-sensor-legend" aria-label="คำอธิบายกราฟ">
           {STAT_LINES.map((line) => (
@@ -548,10 +666,15 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
           const { acts, points } = aggregateActStats(summaries, signal.key);
           const domain = signalDomain(points);
           const chartInnerWidth = chartWidth - padding.left - padding.right;
-          const chartStep = acts.length ? chartInnerWidth / acts.length : chartInnerWidth;
-          const xForChartAct = (index: number) => padding.left + chartStep * index + chartStep / 2;
+          const chartStep = acts.length
+            ? chartInnerWidth / acts.length
+            : chartInnerWidth;
+          const xForChartAct = (index: number) =>
+            padding.left + chartStep * index + chartStep / 2;
           const yForValue = (value: number) =>
-            padding.top + (domain.max - value) * (innerHeight / (domain.max - domain.min || 1));
+            padding.top +
+            (domain.max - value) *
+              (innerHeight / (domain.max - domain.min || 1));
 
           return (
             <article className="act-sensor-chart" key={signal.key}>
@@ -561,20 +684,41 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
                   viewBox={`0 0 ${chartWidth} ${height}`}
                   role="img"
                   aria-label={`กราฟ ${signal.label}`}
-                  style={compact ? { width: "100%", height } : { minWidth: chartWidth, width: chartWidth, height }}
+                  style={
+                    compact
+                      ? { width: "100%", height }
+                      : { minWidth: chartWidth, width: chartWidth, height }
+                  }
                 >
                   {domain.ticks.map((tick) => {
                     const y = yForValue(tick);
                     return (
                       <g key={tick.toFixed(4)}>
-                        <line className="chart-grid-line" x1={padding.left} x2={chartWidth - padding.right} y1={y} y2={y} />
-                        <text className="chart-y-label" x={padding.left - 8} y={y + 4} textAnchor="end">
+                        <line
+                          className="chart-grid-line"
+                          x1={padding.left}
+                          x2={chartWidth - padding.right}
+                          y1={y}
+                          y2={y}
+                        />
+                        <text
+                          className="chart-y-label"
+                          x={padding.left - 8}
+                          y={y + 4}
+                          textAnchor="end"
+                        >
                           {tick.toFixed(signal.decimals)}
                         </text>
                       </g>
                     );
                   })}
-                  <line className="chart-axis-line" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+                  <line
+                    className="chart-axis-line"
+                    x1={padding.left}
+                    x2={padding.left}
+                    y1={padding.top}
+                    y2={height - padding.bottom}
+                  />
                   <line
                     className="chart-axis-line"
                     x1={padding.left}
@@ -586,7 +730,12 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
                     const x = xForChartAct(index);
                     return (
                       <g key={act}>
-                        <text className="chart-x-label" x={x} y={height - 22} textAnchor="middle">
+                        <text
+                          className="chart-x-label"
+                          x={x}
+                          y={height - 22}
+                          textAnchor="middle"
+                        >
                           {formatActLabel(act)}
                         </text>
                       </g>
@@ -595,19 +744,47 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
                   {acts.map((act, index) => {
                     const x = xForChartAct(index);
                     return act.toLowerCase().includes("minigame") ? (
-                      <line key={`mg-${act}`} className="act-minigame-line" x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} />
+                      <line
+                        key={`mg-${act}`}
+                        className="act-minigame-line"
+                        x1={x}
+                        x2={x}
+                        y1={padding.top}
+                        y2={height - padding.bottom}
+                      />
                     ) : null;
                   })}
                   {STAT_LINES.map((line) => {
                     const drawable = points
                       .map((point, index) => {
                         const value = point[line.key];
-                        return value === null ? null : { point, x: xForChartAct(index), y: yForValue(value), value };
+                        return value === null
+                          ? null
+                          : {
+                              point,
+                              x: xForChartAct(index),
+                              y: yForValue(value),
+                              value,
+                            };
                       })
-                      .filter((item): item is { point: ActChartStats; x: number; y: number; value: number } => item !== null);
+                      .filter(
+                        (
+                          item,
+                        ): item is {
+                          point: ActChartStats;
+                          x: number;
+                          y: number;
+                          value: number;
+                        } => item !== null,
+                      );
                     return (
                       <g key={line.key}>
-                        <path className="act-stat-line" d={smoothPath(drawable)} fill="none" stroke={line.color} />
+                        <path
+                          className="act-stat-line"
+                          d={smoothPath(drawable)}
+                          fill="none"
+                          stroke={line.color}
+                        />
                         {drawable.map(({ point, x, y }) => (
                           <circle
                             className="act-stat-dot"
@@ -619,8 +796,10 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
                             stroke={line.color}
                             onMouseEnter={(event) =>
                               setTooltip({
-                                left: event.currentTarget.getBoundingClientRect().left,
-                                top: event.currentTarget.getBoundingClientRect().top,
+                                left: event.currentTarget.getBoundingClientRect()
+                                  .left,
+                                top: event.currentTarget.getBoundingClientRect()
+                                  .top,
                                 point,
                                 signal,
                                 stat: line,
@@ -639,11 +818,20 @@ function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorS
         })}
       </div>
       {tooltip ? (
-        <div className="chart-tooltip" style={{ left: tooltip.left, top: tooltip.top }}>
-          <strong>{tooltip.point.act} - {tooltip.stat.label} (n={tooltip.point.n})</strong>
+        <div
+          className="chart-tooltip"
+          style={{ left: tooltip.left, top: tooltip.top }}
+        >
+          <strong>
+            {tooltip.point.act} - {tooltip.stat.label} (n={tooltip.point.n})
+          </strong>
           <span>
             <i style={{ background: tooltip.stat.color }} />
-            {tooltip.signal.label}: {formatSignal(tooltip.point[tooltip.stat.key], tooltip.signal.decimals)}
+            {tooltip.signal.label}:{" "}
+            {formatSignal(
+              tooltip.point[tooltip.stat.key],
+              tooltip.signal.decimals,
+            )}
           </span>
         </div>
       ) : null}
