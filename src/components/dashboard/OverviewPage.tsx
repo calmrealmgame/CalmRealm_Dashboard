@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Eye, Search, UsersRound } from "lucide-react";
+import { Download, Eye, Search, UsersRound, VenusAndMars } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Participant, SceneData, WatchLog } from "@/lib/supabase";
 import {
@@ -8,7 +8,7 @@ import {
   sortActs,
   formatActLabel,
   DonutPanel,
-  MetricCard,
+  StatPanel,
   PageHeader,
   countBy,
   downloadCsv,
@@ -103,7 +103,9 @@ export function OverviewPage({
   setFilters: (filters: Filters) => void;
   canExport: boolean;
 }) {
-  const [selectedWatchUserId, setSelectedWatchUserId] = useState<number | null>(null);
+  const [selectedWatchUserId, setSelectedWatchUserId] = useState<number | null>(
+    null,
+  );
   const availableActs = useMemo(
     () => sceneActsInDataOrder(sceneData),
     [sceneData],
@@ -204,7 +206,14 @@ export function OverviewPage({
         <section className="dashboard-layout overview-layout">
           <div className="main-stack">
             <section className="overview-visual-grid">
-              <div className="metric-card-wrapper" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div
+                className="metric-card-wrapper"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
+              >
                 <MetricCard
                   label="Participants"
                   value={filteredParticipants.length}
@@ -212,7 +221,11 @@ export function OverviewPage({
                 />
               </div>
               <BarPanel title="Age Distribution" data={ageData} vertical />
-              <DonutPanel title="Gender" data={genderData} icon={UsersRound} />
+              <DonutPanel
+                title="Gender"
+                data={genderData}
+                icon={VenusAndMars}
+              />
               <SchoolSummaryPanel data={schoolData} />
             </section>
             <div className="table-heading">
@@ -277,13 +290,19 @@ function ParticipantProgressTable({
       <div className="table-action-row">
         <div className="table-tools">
           <Search size={16} />
-          <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input
+            placeholder="Search..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
           <span>{visibleRows.length} rows</span>
         </div>
         <button
           className="secondary-button"
           disabled={!canExport || !visibleRows.length}
-          onClick={() => downloadCsv("participant-progress-summary.csv", exportRows)}
+          onClick={() =>
+            downloadCsv("participant-progress-summary.csv", exportRows)
+          }
           type="button"
         >
           <Download size={16} /> Export CSV
@@ -317,7 +336,12 @@ function ParticipantProgressTable({
                   <td>{row["Play Duration"]}</td>
                   <td>{row["Latest Complete"]}</td>
                   <td>
-                    <button className="icon-action-button" onClick={() => onView(row.UserId)} title="View watch data" type="button">
+                    <button
+                      className="icon-action-button"
+                      onClick={() => onView(row.UserId)}
+                      title="View watch data"
+                      type="button"
+                    >
                       <Eye size={15} />
                     </button>
                   </td>
@@ -336,5 +360,3 @@ function ParticipantProgressTable({
     </section>
   );
 }
-
-

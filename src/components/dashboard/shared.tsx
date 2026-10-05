@@ -624,6 +624,47 @@ export function BarPanel({
   );
 }
 
+export function StatPanel({
+  title,
+  value,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  icon?: LucideIcon;
+}) {
+  return (
+    <article className="donut-panel">
+      {" "}
+      {Icon || title ? (
+        <div className="section-title">
+          {" "}
+          {Icon ? (
+            <span className="section-icon">
+              {" "}
+              <Icon size={16} />{" "}
+            </span>
+          ) : null}{" "}
+          <h2>{title}</h2>{" "}
+        </div>
+      ) : null}{" "}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "48px",
+          fontWeight: 800,
+          color: "var(--text-strong)",
+        }}
+      >
+        {" "}
+        {value}{" "}
+      </div>{" "}
+    </article>
+  );
+}
 export function DonutPanel({
   title,
   data,
