@@ -53,7 +53,7 @@ export default function Home() {
       if (error) {
         setAccount(null);
         setDataError(
-          "Signed in, but no DashboardAccount profile was found. Run supabase-dashboard-setup.sql and add this auth user as super_admin/admin.",
+          "Signed in, but no DashboardAccount profile was found. Run supabase-dashboard-setup.sql and add this auth user as admin/stuff/viewer.",
         );
         return;
       }
@@ -85,7 +85,7 @@ export default function Home() {
     loadDashboardData();
   }, [session]);
 
-  const canExport = account?.role === "super_admin";
+  const canExport = account?.role === "admin" || account?.role === "stuff";
 
   if (authLoading) {
     return <div className="center-screen">Loading dashboard...</div>;
@@ -95,7 +95,7 @@ export default function Home() {
     return <LoginScreen />;
   }
 
-  const showAccounts = account?.role === "super_admin";
+  const showAccounts = account?.role === "admin";
 
   return (
     <div className="dashboard-shell">
@@ -108,7 +108,7 @@ export default function Home() {
         </div>
         <nav className="nav-list">
           <button className={page === "overview" ? "active" : ""} onClick={() => setPage("overview")}>
-            <BarChart3 size={18} /> Overview
+            <BarChart3 size={18} /> Game Data
           </button>
           <button className={page === "watch" ? "active" : ""} onClick={() => setPage("watch")}>
             <Activity size={18} /> Watch Data
@@ -123,7 +123,7 @@ export default function Home() {
           <div className="signed-in">
             <Shield size={16} />
             <span>{account?.name ?? session.user.email}</span>
-            <small>{account?.role === "super_admin" ? "Super admin" : "Admin view only"}</small>
+            <small>{formatDashboardRole(account?.role)}</small>
           </div>
           <button className="ghost-button" onClick={() => supabase.auth.signOut()}>
             <LogOut size={16} /> Sign out
@@ -136,6 +136,7 @@ export default function Home() {
           <OverviewPage
             participants={participants}
             sceneData={sceneData}
+            watchLogs={watchLogs}
             filters={filters}
             setFilters={setFilters}
             canExport={canExport}
@@ -154,6 +155,13 @@ export default function Home() {
       </main>
     </div>
   );
+}
+
+function formatDashboardRole(role: DashboardAccount["role"] | undefined) {
+  if (role === "admin") return "Admin";
+  if (role === "stuff") return "Stuff";
+  if (role === "viewer") return "Viewer";
+  return "No role";
 }
 
 function LoginScreen() {

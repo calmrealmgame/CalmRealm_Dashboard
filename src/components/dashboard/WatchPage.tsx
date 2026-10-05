@@ -1,7 +1,7 @@
 "use client";
 
-import { UsersRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, Eye, Search, UsersRound } from "lucide-react";
+import { useState } from "react";
 import type { Participant, WatchLog } from "@/lib/supabase";
 import {
   DataTable,
@@ -9,9 +9,10 @@ import {
   PageHeader,
   asNumber,
   average,
+  formatNumber,
+  formatPercent,
   matchesParticipant,
   participantName,
-  uniqueValues,
   withinDateRange,
   type Filters,
 } from "./shared";
@@ -50,6 +51,10 @@ type UserSensorSummary = SignalAverage & {
   totalActs: number;
   completionPercent: number;
   duration: number | null;
+  latestSample: string | null;
+  latestLoginSession: number | null;
+  loginSessionCount: number;
+  sampleCount: number;
 };
 
 function normalizeSex(value: string | null | undefined): SexKey {
@@ -82,6 +87,20 @@ function formatSignal(value: number | null, decimals: number) {
   return value === null ? "-" : value.toFixed(decimals);
 }
 
+function formatDuration(value: number | null) {
+  return value === null ? "-" : `${formatNumber(value, 1)} min`;
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "-";
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString() : "-";
+}
+
+function formatLoginSession(value: number | null | undefined) {
+  return value === null || value === undefined ? "-" : value;
+}
+
 function smoothPath(points: { x: number; y: number }[]) {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -100,26 +119,22 @@ function smoothPath(points: { x: number; y: number }[]) {
   return commands.join(" ");
 }
 
-function sortActs(values: string[]) {
-  const preferred = ["minigame1", "act1", "minigame2", "act2", "minigame3", "act3", "act4", "minigame4", "act5", "act6"];
-  const orderOf = (value: string) => {
-    const normalized = value.toLowerCase().replace(/\s+/g, "").replace(/-/g, "");
-    const preferredIndex = preferred.indexOf(normalized);
-    return preferredIndex === -1 ? Number.MAX_SAFE_INTEGER : preferredIndex;
-  };
-
-  return [...values].sort((a, b) => {
-    const orderA = orderOf(a);
-    const orderB = orderOf(b);
-    if (orderA !== orderB) return orderA - orderB;
-    return a.localeCompare(b, undefined, { numeric: true });
-  });
-}
-
 function formatActLabel(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+function watchActsInDataOrder(logs: WatchLog[]) {
+  const seen = new Set<string>();
+  const acts: string[] = [];
+  logs.forEach((log) => {
+    const act = log.act?.trim();
+    if (!act || seen.has(act)) return;
+    seen.add(act);
+    acts.push(act);
+  });
+  return acts;
 }
 
 export function WatchPage({
@@ -135,59 +150,35 @@ export function WatchPage({
   setFilters: (filters: Filters) => void;
   canExport: boolean;
 }) {
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const userById = new Map(participants.map((user) => [user.userId, user]));
-  const acts = uniqueValues(watchLogs, (log) => log.act);
-
-  const completeDataUserIds = useMemo(() => {
-    const set = new Set<number>();
-    if (!acts.length) return set;
-    const userActsMap = new Map<number, Set<string>>();
-    watchLogs.forEach((log) => {
-      if (log.userId !== null && log.act) {
-        const userActs = userActsMap.get(log.userId) ?? new Set<string>();
-        userActs.add(log.act);
-        userActsMap.set(log.userId, userActs);
-      }
-    });
-    userActsMap.forEach((actsSet, userId) => {
-      if (actsSet.size >= acts.length) {
-        set.add(userId);
-      }
-    });
-    return set;
-  }, [watchLogs, acts]);
+  const acts = watchActsInDataOrder(watchLogs);
 
   const filteredLogs = watchLogs.filter((log) => {
     const user = log.userId == null ? undefined : userById.get(log.userId);
-    if (!matchesParticipant(user, filters, completeDataUserIds)) return false;
+    if (!matchesParticipant(user, filters)) return false;
     if (filters.act.length && !filters.act.includes(String(log.act ?? ""))) return false;
     return withinDateRange(log.timestamp, filters);
   });
   const sensorLogs = watchLogs.filter((log) => {
     const user = log.userId == null ? undefined : userById.get(log.userId);
-    if (!matchesParticipant(user, filters, completeDataUserIds)) return false;
+    if (!matchesParticipant(user, filters)) return false;
     if (filters.act.length && !filters.act.includes(String(log.act ?? ""))) return false;
     return withinDateRange(log.timestamp, filters);
   });
 
+  const sensorSummary = buildActSensorSummary(participants, sensorLogs, acts);
   const watchParticipants = new Set(filteredLogs.map((log) => log.userId).filter(Boolean));
-  const sensorSummary = buildActSensorSummary(participants, sensorLogs, sortActs(acts.map(String)));
+  const selectedUser =
+    selectedUserId === null
+      ? null
+      : sensorSummary.userSummaries.find((summary) => summary.userId === selectedUserId) ?? null;
 
-  const rows = filteredLogs.map((log) => {
-    const user = log.userId == null ? undefined : userById.get(log.userId);
-    return {
-      Name: user ? `${user.name ?? ""} ${user.lastname ?? ""}`.trim() || user.email || user.userId : log.userId ?? "",
-      Age: user?.age ?? "",
-      Gender: user?.gender ?? "",
-      School: user?.school ?? "",
-      ACT: log.act ?? "",
-      PPG: log.PPG ?? "",
-      EDA: log.EDA ?? "",
-      IMU: asNumber(log.IMU) ?? JSON.stringify(log.IMU ?? ""),
-      // "emotion value": log.emotionValue ?? "",
-      "Time Stamps": log.timestamp ? new Date(log.timestamp).toLocaleString() : "",
-    };
-  });
+  const selectedUserSamples = selectedUserId === null ? [] : buildWatchSampleRows(filteredLogs, userById, selectedUserId);
+  const selectedUserActSummaries =
+    selectedUserId === null
+      ? []
+      : sensorSummary.summaries.filter((summary) => summary.userId === selectedUserId);
 
   return (
     <>
@@ -197,40 +188,162 @@ export function WatchPage({
         filters={filters}
         setFilters={setFilters}
         participants={participants}
-        acts={acts}
-        showAct
       />
       <div className="page-body">
-        <section className="metric-grid watch-metrics">
-          <MetricCard label="Watch Participants" value={watchParticipants.size} icon={UsersRound} />
-        </section>
-        <section className="dashboard-layout overview-layout">
-          <div className="main-stack">
-            <div className="table-heading secondary-heading">
+        {selectedUser ? (
+          <>
+            <button className="back-button" onClick={() => setSelectedUserId(null)} type="button">
+              <ArrowLeft size={16} />
+              Back to Watch Summary
+            </button>
+            <section className="participant-detail-hero">
               <div>
-                <h2>Sensor Summary</h2>
-                <p> Shows sensor trends across each activity, including Min, Avg, and Max values
-                  for PPG, EDA, and IMU. </p>
+                <span>Participant</span>
+                <strong>{selectedUser.user}</strong>
+                <small>
+                  {selectedUser.age ?? "-"} years · {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)?.label ?? selectedUser.sex}
+                  {selectedUser.school ? ` · ${selectedUser.school}` : ""}
+                </small>
+              </div>
+            </section>
+            <section className="dashboard-layout overview-layout">
+              <div className="main-stack">
+                <div className="table-heading secondary-heading">
+                  <div>
+                    <h2>Sensor Summary</h2>
+                    <p>PPG, EDA, and IMU trends for this participant only.</p>
+                  </div>
+                </div>
+                <ActSensorCharts summaries={selectedUserActSummaries} />
+                <div className="table-heading">
+                  <h2>Watch Samples</h2>
+                </div>
+                {!canExport ? <p className="hint">Viewer role can view data only. Export is available for admin and stuff.</p> : null}
+                <DataTable rows={selectedUserSamples} exportFilename={`watch-samples-${selectedUser.userId}.csv`} canExport={canExport} />
+              </div>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="metric-grid watch-metrics">
+              <MetricCard label="Watch Participants" value={watchParticipants.size} icon={UsersRound} />
+            </section>
+            <div className="table-heading watch-summary-heading">
+              <div>
+                <h2>Watch Summary</h2>
+                <p>One participant per row. Select a participant to view personal progress, sensor charts, and samples.</p>
               </div>
             </div>
-            {/* {sensorSummary.warnings.length ? (
-              // <div className="data-warning-list">
-              //   {sensorSummary.warnings.map((warning) => (
-              //     <p key={warning}>{warning}</p>
-              //   ))}
-              // </div>
-            ) : null} */}
-            {/* <DataTable rows={sensorSummary.rows} /> */}
-            <ActSensorCharts summaries={sensorSummary.summaries} />
-            <div className="table-heading secondary-heading">
-              <h2>Watch Samples</h2>
-            </div>
-            {!canExport ? <p className="hint">Admin role can view data only. Export is available for super admin.</p> : null}
-            <DataTable rows={rows} exportFilename="watch-data.csv" canExport={canExport} />
-          </div>
-        </section>
+            <WatchSummaryTable summaries={sensorSummary.userSummaries} onSelect={setSelectedUserId} />
+          </>
+        )}
       </div>
     </>
+  );
+}
+
+function buildSummaryTableRow(summary: UserSensorSummary) {
+  return {
+    User: summary.user,
+    Age: summary.age ?? "",
+    School: summary.school ?? "",
+    "Login Sessions": summary.loginSessionCount,
+    "Avg PPG": formatSignal(summary.ppg, 1),
+    "Avg EDA": formatSignal(summary.eda, 2),
+    "Avg IMU": formatSignal(summary.imu, 2),
+  };
+}
+
+function buildWatchSampleRows(logs: WatchLog[], userById: Map<number, Participant>, selectedUserId?: number) {
+  return logs
+    .filter((log) => selectedUserId === undefined || log.userId === selectedUserId)
+    .map((log) => {
+      const user = log.userId == null ? undefined : userById.get(log.userId);
+      return {
+        Name: user ? participantName(user) : log.userId ?? "",
+        Age: user?.age ?? "",
+        Gender: user?.gender ?? "",
+        School: user?.school ?? "",
+        ACT: log.act ?? "",
+        PPG: log.PPG ?? "",
+        EDA: log.EDA ?? "",
+        IMU: asNumber(log.IMU) ?? JSON.stringify(log.IMU ?? ""),
+        "Time Stamps": formatTimestamp(log.timestamp),
+      };
+    });
+}
+
+function WatchSummaryTable({
+  summaries,
+  onSelect,
+}: {
+  summaries: UserSensorSummary[];
+  onSelect: (userId: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const visibleSummaries = summaries.filter((summary) =>
+    JSON.stringify(buildSummaryTableRow(summary)).toLowerCase().includes(query.toLowerCase()),
+  );
+
+  return (
+    <section className="table-card watch-summary-table">
+      <div className="table-action-row">
+        <div className="table-tools">
+          <Search size={16} />
+          <input placeholder="Search..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <span>{visibleSummaries.length} rows</span>
+        </div>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Age</th>
+              <th>School</th>
+              <th>Login Sessions</th>
+              <th>Avg PPG</th>
+              <th>Avg EDA</th>
+              <th>Avg IMU</th>
+              <th>View</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleSummaries.length ? (
+              visibleSummaries.map((summary) => {
+                const row = buildSummaryTableRow(summary);
+                return (
+                  <tr key={summary.userId}>
+                    <td>
+                      <button className="link-button" onClick={() => onSelect(summary.userId)} type="button">
+                        {row.User}
+                      </button>
+                    </td>
+                    <td>{row.Age}</td>
+                    <td>{row.School}</td>
+                    <td>{row["Login Sessions"]}</td>
+                    <td>{row["Avg PPG"]}</td>
+                    <td>{row["Avg EDA"]}</td>
+                    <td>{row["Avg IMU"]}</td>
+                    <td>
+                      <button className="icon-action-button" onClick={() => onSelect(summary.userId)} title="View participant" type="button">
+                        <Eye size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={8} className="empty-state">
+                  No data
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -282,6 +395,20 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
   const userSummaries: UserSensorSummary[] = Array.from(logsByUser, ([userId, userLogs]) => {
     const user = userById.get(userId);
     const playedActs = new Set(userLogs.map((log) => log.act?.trim()).filter(Boolean)).size;
+    const loginSessions = new Set(
+      userLogs
+        .map((log) => log.LoginSession)
+        .filter((value): value is number => value !== null && value !== undefined),
+    );
+    const latestLog = [...userLogs].sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    })[0];
+    const latestSample = userLogs
+      .map((log) => log.timestamp)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
     return {
       userId,
       user: participantName(user),
@@ -292,6 +419,10 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
       totalActs: allActs.length,
       completionPercent: allActs.length ? (playedActs / allActs.length) * 100 : 0,
       duration: estimateGroupAverageDurationValue(userLogs),
+      latestSample,
+      latestLoginSession: latestLog?.LoginSession ?? null,
+      loginSessionCount: loginSessions.size,
+      sampleCount: userLogs.length,
       ppg: finiteAverage(userLogs.map((log) => asNumber(log.PPG))),
       imu: finiteAverage(userLogs.map((log) => imuAverage(log.IMU))),
       eda: finiteAverage(userLogs.map((log) => asNumber(log.EDA))),
@@ -305,17 +436,21 @@ function buildActSensorSummary(participants: Participant[], logs: WatchLog[], al
       Age: summary.age ?? "",
       Gender: DEMOGRAPHIC_SEXES.find((sex) => sex.key === summary.sex)?.label ?? summary.sex,
       School: summary.school ?? "",
-      "Play Duration": summary.duration === null ? "-" : `${summary.duration.toFixed(1)} min`,
-      "Completed Data": `${summary.completionPercent.toFixed(0)}%`,
+      "Login Sessions": summary.loginSessionCount,
+      "Play Duration": formatDuration(summary.duration),
+      "Completed Data": formatPercent(summary.completionPercent),
       Status: summary.totalActs > 0 && summary.playedActs >= summary.totalActs ? "Complete" : "Incomplete",
       "Avg PPG": formatSignal(summary.ppg, 1),
       "Avg IMU": formatSignal(summary.imu, 2),
       "Avg EDA": formatSignal(summary.eda, 2),
+      "Watch Samples": summary.sampleCount,
+      "Latest Session": formatLoginSession(summary.latestLoginSession),
+      "Latest Sample": formatTimestamp(summary.latestSample),
     }));
 
   if (!rows.length) warnings.add("ไม่พบข้อมูล sensor สำหรับสร้างตารางสรุป");
 
-  return { summaries, rows, warnings: Array.from(warnings) };
+  return { summaries, userSummaries, rows, warnings: Array.from(warnings) };
 }
 
 function estimateGroupAverageDurationValue(logs: WatchLog[]) {
@@ -343,7 +478,7 @@ const STAT_LINES = [
 
 function aggregateActStats(summaries: ActSensorSummary[], signalKey: SignalKey) {
   const filtered = summaries;
-  const acts = sortActs(Array.from(new Set(filtered.map((summary) => summary.act))));
+  const acts = Array.from(new Set(filtered.map((summary) => summary.act)));
 
   const points = acts.map((act) => {
     const values = filtered
@@ -379,7 +514,7 @@ function signalDomain(points: ActChartStats[]) {
   };
 }
 
-function ActSensorCharts({ summaries }: { summaries: ActSensorSummary[] }) {
+function ActSensorCharts({ summaries, compact = false }: { summaries: ActSensorSummary[]; compact?: boolean }) {
   const [tooltip, setTooltip] = useState<{
     left: number;
     top: number;
@@ -387,13 +522,13 @@ function ActSensorCharts({ summaries }: { summaries: ActSensorSummary[] }) {
     signal: (typeof SIGNALS)[number];
     stat: (typeof STAT_LINES)[number];
   } | null>(null);
-  const height = 310;
-  const chartWidth = 1180;
-  const padding = { top: 22, right: 24, bottom: 72, left: 44 };
+  const height = compact ? 260 : 310;
+  const chartWidth = compact ? 680 : 1180;
+  const padding = compact ? { top: 18, right: 20, bottom: 62, left: 42 } : { top: 22, right: 24, bottom: 72, left: 44 };
   const innerHeight = height - padding.top - padding.bottom;
 
   return (
-    <section className="act-sensor-panel">
+    <section className={compact ? "act-sensor-panel compact" : "act-sensor-panel"}>
       <div className="act-sensor-toolbar">
         <div className="act-sensor-legend" aria-label="คำอธิบายกราฟ">
           {STAT_LINES.map((line) => (
@@ -422,7 +557,12 @@ function ActSensorCharts({ summaries }: { summaries: ActSensorSummary[] }) {
             <article className="act-sensor-chart" key={signal.key}>
               <h3>{signal.label.replace(" avg", "")}</h3>
               <div className="demographic-svg-wrap">
-                <svg viewBox={`0 0 ${chartWidth} ${height}`} role="img" aria-label={`กราฟ ${signal.label}`} style={{ minWidth: chartWidth }}>
+                <svg
+                  viewBox={`0 0 ${chartWidth} ${height}`}
+                  role="img"
+                  aria-label={`กราฟ ${signal.label}`}
+                  style={compact ? { width: "100%", height } : { minWidth: chartWidth, width: chartWidth, height }}
+                >
                   {domain.ticks.map((tick) => {
                     const y = yForValue(tick);
                     return (

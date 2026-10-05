@@ -11,7 +11,7 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_A
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type DashboardRole = "super_admin" | "admin";
+export type DashboardRole = "admin" | "stuff" | "viewer";
 
 export type DashboardAccount = {
   id: string;
@@ -53,5 +53,6 @@ export type WatchLog = {
   EDA: number | null;
   IMU: unknown;
   emotionValue: string | null;
+  LoginSession: number | null;
   userId: number | null;
 };

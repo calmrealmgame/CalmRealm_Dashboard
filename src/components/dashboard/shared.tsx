@@ -11,7 +11,6 @@ export type Filters = {
   age: string[];
   school: string[];
   act: string[];
-  dataStatus: string;
 };
 
 export const emptyFilters: Filters = {
@@ -21,7 +20,6 @@ export const emptyFilters: Filters = {
   age: [],
   school: [],
   act: [],
-  dataStatus: "all",
 };
 
 function csvEscape(value: unknown) {
@@ -65,13 +63,12 @@ export function withinDateRange(dateValue: string | null | undefined, filters: F
 export function matchesParticipant(
   user: Participant | undefined,
   filters: Filters,
-  completedUserIds?: Set<number>,
 ) {
   if (!user) return false;
   if (filters.gender.length && !filters.gender.includes(String(user.gender ?? ""))) return false;
   if (filters.age.length && !filters.age.includes(String(user.age ?? ""))) return false;
   if (filters.school.length && !filters.school.includes(String(user.school ?? ""))) return false;
-  if (filters.dataStatus === "complete" && completedUserIds && !completedUserIds.has(user.userId)) return false;
+
   return true;
 }
 
@@ -200,14 +197,10 @@ export function FilterPanel({
   filters,
   setFilters,
   participants,
-  acts,
-  showAct,
 }: {
   filters: Filters;
   setFilters: (filters: Filters) => void;
   participants: Participant[];
-  acts: (string | number)[];
-  showAct?: boolean;
 }) {
   const genders = uniqueValues(participants, (user) => user.gender);
   const ages = uniqueValues(participants, (user) => user.age);
@@ -233,16 +226,7 @@ export function FilterPanel({
         <MultiCheckboxFilter label="Gender" values={filters.gender} options={genders} onChange={(gender) => setFilters({ ...filters, gender })} />
         <MultiCheckboxFilter label="Age" values={filters.age} options={ages} onChange={(age) => setFilters({ ...filters, age })} />
         <MultiCheckboxFilter label="School" values={filters.school} options={schools} onChange={(school) => setFilters({ ...filters, school })} />
-        <label>
-          Data Status
-          <select value={filters.dataStatus} onChange={(event) => setFilters({ ...filters, dataStatus: event.target.value })}>
-            <option value="all">All Users (ทุกคน)</option>
-            <option value="complete">Complete Data Only (เฉพาะคนที่มี Data ครบ)</option>
-          </select>
-        </label>
-        {showAct ? (
-          <MultiCheckboxFilter label="ACT" values={filters.act} options={acts} onChange={(act) => setFilters({ ...filters, act })} />
-        ) : null}
+
       </div>
       <button className="text-button" onClick={() => setFilters(emptyFilters)}>
         <RotateCcw size={14} />
@@ -258,16 +242,12 @@ export function PageHeader({
   filters,
   setFilters,
   participants,
-  acts,
-  showAct,
 }: {
   title: string;
   description: string;
   filters?: Filters;
   setFilters?: (filters: Filters) => void;
   participants?: Participant[];
-  acts?: (string | number)[];
-  showAct?: boolean;
 }) {
   const genders = participants ? uniqueValues(participants, (user) => user.gender) : [];
   const ages = participants ? uniqueValues(participants, (user) => user.age) : [];
@@ -279,9 +259,7 @@ export function PageHeader({
       filters.to !== "" ||
       filters.gender.length > 0 ||
       filters.age.length > 0 ||
-      filters.school.length > 0 ||
-      filters.dataStatus !== "all" ||
-      (showAct && filters.act.length > 0)),
+      filters.school.length > 0),
   );
 
   return (
@@ -320,19 +298,7 @@ export function PageHeader({
           <MultiCheckboxFilter label="Gender" values={filters.gender} options={genders} onChange={(gender) => setFilters({ ...filters, gender })} />
           <MultiCheckboxFilter label="Age" values={filters.age} options={ages} onChange={(age) => setFilters({ ...filters, age })} />
           <MultiCheckboxFilter label="School" values={filters.school} options={schools} onChange={(school) => setFilters({ ...filters, school })} />
-          <div className="header-filter-item">
-            <label>Data Status</label>
-            <select
-              value={filters.dataStatus}
-              onChange={(event) => setFilters({ ...filters, dataStatus: event.target.value })}
-            >
-              <option value="all">All Users</option>
-              <option value="complete">Complete Data Only</option>
-            </select>
-          </div>
-          {showAct && acts ? (
-            <MultiCheckboxFilter label="ACT" values={filters.act} options={acts} onChange={(act) => setFilters({ ...filters, act })} />
-          ) : null}
+
           {/* {setFilters ? (
             <button
               className="header-filter-reset"
