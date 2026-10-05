@@ -1,14 +1,12 @@
 "use client";
 
-import { ArrowLeft, Eye, Search, UsersRound } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { Participant, WatchLog } from "@/lib/supabase";
 import {
   DataTable,
   sortActs,
   formatActLabel,
-  MetricCard,
-  PageHeader,
   asNumber,
   average,
   formatNumber,
@@ -24,13 +22,7 @@ const DEMOGRAPHIC_SEXES = [
   { key: "male", label: "Male", color: "#3ba6f2" },
   { key: "other", label: "Others", color: "#d9d9d9" },
 ] as const;
-const SIGNALS = [
-  { key: "ppg", label: "PPG avg", decimals: 1 },
-  { key: "imu", label: "IMU avg", decimals: 2 },
-  { key: "eda", label: "EDA avg", decimals: 2 },
-] as const;
-
-type SignalKey = (typeof SIGNALS)[number]["key"];
+type SignalKey = "ppg" | "imu" | "eda";
 type SexKey = (typeof DEMOGRAPHIC_SEXES)[number]["key"];
 type SignalAverage = Record<SignalKey, number | null>;
 
@@ -103,10 +95,15 @@ function formatDuration(value: number | null) {
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "-";
-  const timestamp = new Date(value).getTime();
+  const timestamp = timestampMs(value);
   return Number.isFinite(timestamp)
     ? new Date(timestamp).toLocaleString()
     : "-";
+}
+
+function timestampMs(value: string | null | undefined) {
+  if (!value) return Number.NaN;
+  return new Date(value).getTime();
 }
 
 function formatLoginSession(value: number | null | undefined) {
@@ -144,20 +141,21 @@ function watchActsInDataOrder(logs: WatchLog[]) {
   return sortActs(acts);
 }
 
-export function WatchPage({
+export function ParticipantWatchProfile({
   participants,
   watchLogs,
   filters,
-  setFilters,
+  selectedUserId,
   canExport,
+  onBack,
 }: {
   participants: Participant[];
   watchLogs: WatchLog[];
   filters: Filters;
-  setFilters: (filters: Filters) => void;
+  selectedUserId: number;
   canExport: boolean;
+  onBack: () => void;
 }) {
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const userById = new Map(participants.map((user) => [user.userId, user]));
   const acts = watchActsInDataOrder(watchLogs);
 
@@ -177,46 +175,29 @@ export function WatchPage({
   });
 
   const sensorSummary = buildActSensorSummary(participants, sensorLogs, acts);
-  const watchParticipants = new Set(
-    filteredLogs.map((log) => log.userId).filter(Boolean),
-  );
   const selectedUser =
-    selectedUserId === null
-      ? null
-      : (sensorSummary.userSummaries.find(
-          (summary) => summary.userId === selectedUserId,
-        ) ?? null);
-
-  const selectedUserSamples =
-    selectedUserId === null
-      ? []
-      : buildWatchSampleRows(filteredLogs, userById, selectedUserId);
-  const selectedUserActSummaries =
-    selectedUserId === null
-      ? []
-      : sensorSummary.summaries.filter(
-          (summary) => summary.userId === selectedUserId,
-        );
+    sensorSummary.userSummaries.find(
+      (summary) => summary.userId === selectedUserId,
+    ) ??
+    buildEmptyUserSensorSummary(userById.get(selectedUserId), acts.length);
+  const selectedUserLogs = filteredLogs
+    .filter((log) => log.userId === selectedUserId)
+    .sort((a, b) => timestampMs(a.timestamp) - timestampMs(b.timestamp));
+  const selectedUserSamples = buildWatchSampleRows(
+    filteredLogs,
+    userById,
+    selectedUserId,
+  );
 
   return (
     <>
-      <PageHeader
-        title="Watch Data"
-        description="Watch records grouped by ACT, participant, and physiological signal."
-        filters={selectedUser ? undefined : filters}
-        setFilters={selectedUser ? undefined : setFilters}
-        participants={participants}
-      />
-      <div className="page-body">
-        {selectedUser ? (
-          <>
             <button
               className="back-button"
-              onClick={() => setSelectedUserId(null)}
+              onClick={onBack}
               type="button"
             >
               <ArrowLeft size={16} />
-              Back to Watch Summary
+              Back to Overview
             </button>
             <section className="participant-detail-hero">
               <div>
@@ -235,10 +216,10 @@ export function WatchPage({
                 <div className="table-heading secondary-heading">
                   <div>
                     <h2>Sensor Summary</h2>
-                    <p>PPG, EDA, and IMU trends for this participant only.</p>
+                    <p>Timestamp trends by login session for this participant.</p>
                   </div>
                 </div>
-                <ActSensorCharts summaries={selectedUserActSummaries} />
+                <SensorTimelinePanel logs={selectedUserLogs} />
                 <div className="table-heading">
                   <h2>Watch Samples</h2>
                 </div>
@@ -255,45 +236,31 @@ export function WatchPage({
                 />
               </div>
             </section>
-          </>
-        ) : (
-          <>
-            <section className="metric-grid watch-metrics">
-              <MetricCard
-                label="Watch Participants"
-                value={watchParticipants.size}
-                icon={UsersRound}
-              />
-            </section>
-            <div className="table-heading watch-summary-heading">
-              <div>
-                <h2>Watch Summary</h2>
-                <p>
-                  One participant per row. Select a participant to view personal
-                  progress, sensor charts, and samples.
-                </p>
-              </div>
-            </div>
-            <WatchSummaryTable
-              summaries={sensorSummary.userSummaries}
-              onSelect={setSelectedUserId}
-            />
-          </>
-        )}
-      </div>
     </>
   );
 }
 
-function buildSummaryTableRow(summary: UserSensorSummary) {
+function buildEmptyUserSensorSummary(
+  user: Participant | undefined,
+  totalActs: number,
+): UserSensorSummary {
   return {
-    User: summary.user,
-    Age: summary.age ?? "",
-    School: summary.school ?? "",
-    "Login Sessions": summary.loginSessionCount,
-    "Avg PPG": formatSignal(summary.ppg, 1),
-    "Avg EDA": formatSignal(summary.eda, 2),
-    "Avg IMU": formatSignal(summary.imu, 2),
+    userId: user?.userId ?? 0,
+    user: participantName(user),
+    age: user?.age ?? null,
+    sex: normalizeSex(user?.gender),
+    school: user?.school ?? null,
+    playedActs: 0,
+    totalActs,
+    completionPercent: 0,
+    duration: null,
+    latestSample: null,
+    latestLoginSession: null,
+    loginSessionCount: 0,
+    sampleCount: 0,
+    ppg: null,
+    imu: null,
+    eda: null,
   };
 }
 
@@ -313,102 +280,16 @@ function buildWatchSampleRows(
         Age: user?.age ?? "",
         Gender: user?.gender ?? "",
         School: user?.school ?? "",
+        "Login Session": log.LoginSession ?? "",
         ACT: formatActLabel(log.act ?? ""),
+        HRV: formatSignal(readMetricValue(log, "hrv"), 1),
         PPG: log.PPG ?? "",
         EDA: log.EDA ?? "",
         IMU: asNumber(log.IMU) ?? JSON.stringify(log.IMU ?? ""),
+        Class: formatClassValue(readMetricValue(log, "class")),
         "Time Stamps": formatTimestamp(log.timestamp),
       };
     });
-}
-
-function WatchSummaryTable({
-  summaries,
-  onSelect,
-}: {
-  summaries: UserSensorSummary[];
-  onSelect: (userId: number) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const visibleSummaries = summaries.filter((summary) =>
-    JSON.stringify(buildSummaryTableRow(summary))
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-
-  return (
-    <section className="table-card watch-summary-table">
-      <div className="table-action-row">
-        <div className="table-tools">
-          <Search size={16} />
-          <input
-            placeholder="Search..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <span>{visibleSummaries.length} rows</span>
-        </div>
-      </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Age</th>
-              <th>School</th>
-              <th>Login Sessions</th>
-              <th>Avg PPG</th>
-              <th>Avg EDA</th>
-              <th>Avg IMU</th>
-              <th>View</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleSummaries.length ? (
-              visibleSummaries.map((summary) => {
-                const row = buildSummaryTableRow(summary);
-                return (
-                  <tr key={summary.userId}>
-                    <td>
-                      <button
-                        className="link-button"
-                        onClick={() => onSelect(summary.userId)}
-                        type="button"
-                      >
-                        {row.User}
-                      </button>
-                    </td>
-                    <td>{row.Age}</td>
-                    <td>{row.School}</td>
-                    <td>{row["Login Sessions"]}</td>
-                    <td>{row["Avg PPG"]}</td>
-                    <td>{row["Avg EDA"]}</td>
-                    <td>{row["Avg IMU"]}</td>
-                    <td>
-                      <button
-                        className="icon-action-button"
-                        onClick={() => onSelect(summary.userId)}
-                        title="View participant"
-                        type="button"
-                      >
-                        <Eye size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={8} className="empty-state">
-                  No data
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
 }
 
 function buildActSensorSummary(
@@ -560,281 +441,232 @@ function estimateGroupAverageDurationValue(logs: WatchLog[]) {
   return Number.isFinite(duration) && duration > 0 ? duration : null;
 }
 
-type ActChartStats = {
-  act: string;
-  n: number;
-  min: number | null;
-  avg: number | null;
-  max: number | null;
+type TimelineMetric = {
+  key: "hrv" | "ppg" | "eda" | "imu" | "class";
+  label: string;
+  unit: string;
+  color: string;
+  kind: "line" | "class";
+  decimals: number;
 };
 
-const STAT_LINES = [
-  { key: "max", label: "MAX", color: "#ff9333" },
-  { key: "avg", label: "AVG", color: "#3da5ff" },
-  { key: "min", label: "MIN", color: "#57d66d" },
-] as const;
+const TIMELINE_METRICS: TimelineMetric[] = [
+  { key: "hrv", label: "HRV (RMSSD)", unit: "ms", color: "#39a866", kind: "line", decimals: 1 },
+  { key: "ppg", label: "PPG", unit: "BPM", color: "#2f6fbd", kind: "line", decimals: 1 },
+  { key: "eda", label: "Electrodermal Activity (EDA)", unit: "µS", color: "#9b5bd6", kind: "line", decimals: 2 },
+  { key: "imu", label: "Movement (IMU)", unit: "a.u.", color: "#f59e0b", kind: "line", decimals: 2 },
+  { key: "class", label: "Class", unit: "1-5", color: "#ef4444", kind: "class", decimals: 0 },
+];
 
-function aggregateActStats(
-  summaries: ActSensorSummary[],
-  signalKey: SignalKey,
-) {
-  const filtered = summaries;
-  const acts = sortActs(
-    Array.from(new Set(filtered.map((summary) => summary.act))),
+function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
+  const finite = (value: number | null) =>
+    value !== null && Number.isFinite(value) ? value : null;
+  if (metric === "ppg") return finite(asNumber(log.PPG));
+  if (metric === "eda") return finite(asNumber(log.EDA));
+  if (metric === "imu") return finite(imuAverage(log.IMU));
+  if (metric === "hrv") {
+    return finite(
+      asNumber(log.HRV) ??
+      asNumber(log.hrv) ??
+      asNumber(log.RMSSD) ??
+      asNumber(log.rmssd) ??
+      asNumber(log.HRV_RMSSD),
+    );
+  }
+  return finite(
+    asNumber(log.Class) ??
+    asNumber(log.class) ??
+    asNumber(log.emotionValue),
   );
-
-  const points = acts.map((act) => {
-    const values = filtered
-      .filter((summary) => summary.act === act)
-      .map((summary) => summary[signalKey])
-      .filter((value): value is number => value !== null);
-    return {
-      act,
-      n: values.length,
-      min: values.length ? Math.min(...values) : null,
-      avg: average(values),
-      max: values.length ? Math.max(...values) : null,
-    };
-  });
-
-  return { acts, points, filtered };
 }
 
-function signalDomain(points: ActChartStats[]) {
-  const values = points
-    .flatMap((point) => [point.min, point.avg, point.max])
-    .filter((value): value is number => value !== null);
-  if (!values.length) return { min: 0, max: 1, ticks: [0, 0.25, 0.5, 0.75, 1] };
+function formatClassValue(value: number | null) {
+  return value === null ? "-" : Math.max(1, Math.min(5, Math.round(value)));
+}
 
+function timeLabel(value: number) {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function metricDomain(values: number[], metric: TimelineMetric) {
+  if (metric.key === "class") return { min: 1, max: 5, ticks: [1, 2, 3, 4, 5] };
+  if (!values.length) return { min: 0, max: 1, ticks: [0, 0.5, 1] };
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
-  const range = rawMax - rawMin || Math.max(rawMax * 0.1, 1);
-  const min = Math.max(0, rawMin - range * 0.12);
-  const max = rawMax + range * 0.18;
-
+  const range = rawMax - rawMin || Math.max(Math.abs(rawMax) * 0.1, 1);
+  const min = Math.max(0, rawMin - range * 0.16);
+  const max = rawMax + range * 0.2;
   return {
     min,
     max,
-    ticks: Array.from(
-      { length: 5 },
-      (_, index) => min + ((max - min) / 4) * index,
-    ),
+    ticks: [min, min + (max - min) / 2, max],
   };
 }
 
-function ActSensorCharts({
-  summaries,
-  compact = false,
-}: {
-  summaries: ActSensorSummary[];
-  compact?: boolean;
-}) {
-  const [tooltip, setTooltip] = useState<{
-    left: number;
-    top: number;
-    point: ActChartStats;
-    signal: (typeof SIGNALS)[number];
-    stat: (typeof STAT_LINES)[number];
-  } | null>(null);
-  const height = compact ? 260 : 310;
-  const chartWidth = compact ? 680 : 1180;
-  const padding = compact
-    ? { top: 18, right: 20, bottom: 62, left: 42 }
-    : { top: 22, right: 24, bottom: 72, left: 44 };
-  const innerHeight = height - padding.top - padding.bottom;
+function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
+  const sessionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          logs
+            .map((log) => log.LoginSession)
+            .filter((value): value is number => value !== null && value !== undefined),
+        ),
+      ).sort((a, b) => a - b),
+    [logs],
+  );
+  const [session, setSession] = useState("all");
+  const visibleLogs = logs.filter(
+    (log) => session === "all" || String(log.LoginSession ?? "") === session,
+  );
+  const timedLogs = visibleLogs
+    .map((log) => ({ log, time: timestampMs(log.timestamp) }))
+    .filter((item): item is { log: WatchLog; time: number } => Number.isFinite(item.time));
 
   return (
-    <section
-      className={compact ? "act-sensor-panel compact" : "act-sensor-panel"}
-    >
-      <div className="act-sensor-toolbar">
-        <div className="act-sensor-legend" aria-label="คำอธิบายกราฟ">
-          {STAT_LINES.map((line) => (
-            <span key={line.key}>
-              <b style={{ borderTopColor: line.color }} />
-              {line.label}
-            </span>
-          ))}
-          <span>
-            <em />
-            Minigames
-          </span>
-        </div>
+    <section className="sensor-timeline-panel">
+      <div className="sensor-timeline-toolbar">
+        <label>
+          Login session
+          <select value={session} onChange={(event) => setSession(event.target.value)}>
+            <option value="all">All sessions</option>
+            {sessionOptions.map((value) => (
+              <option key={value} value={String(value)}>
+                Session {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span>{timedLogs.length} samples</span>
       </div>
-      <div className="act-sensor-strip">
-        {SIGNALS.map((signal) => {
-          const { acts, points } = aggregateActStats(summaries, signal.key);
-          const domain = signalDomain(points);
-          const chartInnerWidth = chartWidth - padding.left - padding.right;
-          const chartStep = acts.length
-            ? chartInnerWidth / acts.length
-            : chartInnerWidth;
-          const xForChartAct = (index: number) =>
-            padding.left + chartStep * index + chartStep / 2;
-          const yForValue = (value: number) =>
-            padding.top +
-            (domain.max - value) *
-              (innerHeight / (domain.max - domain.min || 1));
-
-          return (
-            <article className="act-sensor-chart" key={signal.key}>
-              <h3>{signal.label.replace(" avg", "")}</h3>
-              <div className="demographic-svg-wrap">
-                <svg
-                  viewBox={`0 0 ${chartWidth} ${height}`}
-                  role="img"
-                  aria-label={`กราฟ ${signal.label}`}
-                  style={
-                    compact
-                      ? { width: "100%", height }
-                      : { minWidth: chartWidth, width: chartWidth, height }
-                  }
-                >
-                  {domain.ticks.map((tick) => {
-                    const y = yForValue(tick);
-                    return (
-                      <g key={tick.toFixed(4)}>
-                        <line
-                          className="chart-grid-line"
-                          x1={padding.left}
-                          x2={chartWidth - padding.right}
-                          y1={y}
-                          y2={y}
-                        />
-                        <text
-                          className="chart-y-label"
-                          x={padding.left - 8}
-                          y={y + 4}
-                          textAnchor="end"
-                        >
-                          {tick.toFixed(signal.decimals)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                  <line
-                    className="chart-axis-line"
-                    x1={padding.left}
-                    x2={padding.left}
-                    y1={padding.top}
-                    y2={height - padding.bottom}
-                  />
-                  <line
-                    className="chart-axis-line"
-                    x1={padding.left}
-                    x2={chartWidth - padding.right}
-                    y1={height - padding.bottom}
-                    y2={height - padding.bottom}
-                  />
-                  {acts.map((act, index) => {
-                    const x = xForChartAct(index);
-                    return (
-                      <g key={act}>
-                        <text
-                          className="chart-x-label"
-                          x={x}
-                          y={height - 22}
-                          textAnchor="middle"
-                        >
-                          {formatActLabel(act)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                  {acts.map((act, index) => {
-                    const x = xForChartAct(index);
-                    return act.toLowerCase().includes("minigame") ? (
-                      <line
-                        key={`mg-${act}`}
-                        className="act-minigame-line"
-                        x1={x}
-                        x2={x}
-                        y1={padding.top}
-                        y2={height - padding.bottom}
-                      />
-                    ) : null;
-                  })}
-                  {STAT_LINES.map((line) => {
-                    const drawable = points
-                      .map((point, index) => {
-                        const value = point[line.key];
-                        return value === null
-                          ? null
-                          : {
-                              point,
-                              x: xForChartAct(index),
-                              y: yForValue(value),
-                              value,
-                            };
-                      })
-                      .filter(
-                        (
-                          item,
-                        ): item is {
-                          point: ActChartStats;
-                          x: number;
-                          y: number;
-                          value: number;
-                        } => item !== null,
-                      );
-                    return (
-                      <g key={line.key}>
-                        <path
-                          className="act-stat-line"
-                          d={smoothPath(drawable)}
-                          fill="none"
-                          stroke={line.color}
-                        />
-                        {drawable.map(({ point, x, y }) => (
-                          <circle
-                            className="act-stat-dot"
-                            key={`${signal.key}-${line.key}-${point.act}`}
-                            cx={x}
-                            cy={y}
-                            r={4}
-                            fill={line.color}
-                            stroke={line.color}
-                            onMouseEnter={(event) =>
-                              setTooltip({
-                                left: event.currentTarget.getBoundingClientRect()
-                                  .left,
-                                top: event.currentTarget.getBoundingClientRect()
-                                  .top,
-                                point,
-                                signal,
-                                stat: line,
-                              })
-                            }
-                            onMouseLeave={() => setTooltip(null)}
-                          />
-                        ))}
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            </article>
-          );
-        })}
+      <div className="sensor-timeline-stack">
+        {TIMELINE_METRICS.map((metric) => (
+          <SensorTimelineChart key={metric.key} metric={metric} points={timedLogs} />
+        ))}
       </div>
-      {tooltip ? (
-        <div
-          className="chart-tooltip"
-          style={{ left: tooltip.left, top: tooltip.top }}
-        >
-          <strong>
-            {tooltip.point.act} - {tooltip.stat.label} (n={tooltip.point.n})
-          </strong>
-          <span>
-            <i style={{ background: tooltip.stat.color }} />
-            {tooltip.signal.label}:{" "}
-            {formatSignal(
-              tooltip.point[tooltip.stat.key],
-              tooltip.signal.decimals,
-            )}
-          </span>
-        </div>
-      ) : null}
     </section>
+  );
+}
+
+function SensorTimelineChart({
+  metric,
+  points,
+}: {
+  metric: TimelineMetric;
+  points: { log: WatchLog; time: number }[];
+}) {
+  const width = 1180;
+  const height = metric.kind === "class" ? 116 : 150;
+  const padding = { top: 16, right: 22, bottom: 42, left: 54 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const acts = sortActs(
+    Array.from(
+      new Set(
+        points
+          .map((point) => formatActLabel(point.log.act?.trim() || "Unknown"))
+          .filter(Boolean),
+      ),
+    ),
+  );
+  const values = points
+    .map((point) => readMetricValue(point.log, metric.key))
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+  const domain = metricDomain(values, metric);
+  const actStep = acts.length ? innerWidth / acts.length : innerWidth;
+  const actTimeRanges = new Map(
+    acts.map((act) => {
+      const actTimes = points
+        .filter((point) => formatActLabel(point.log.act?.trim() || "Unknown") === act)
+        .map((point) => point.time);
+      return [act, { min: Math.min(...actTimes), max: Math.max(...actTimes) }];
+    }),
+  );
+  const xForActTimestamp = (log: WatchLog, time: number) => {
+    const act = formatActLabel(log.act?.trim() || "Unknown");
+    const actIndex = Math.max(0, acts.indexOf(act));
+    const range = actTimeRanges.get(act);
+    const ratio = range && Number.isFinite(range.min) && Number.isFinite(range.max) && range.max > range.min
+      ? (time - range.min) / (range.max - range.min)
+      : 0.5;
+    return padding.left + actStep * actIndex + Math.max(0.12, Math.min(0.88, ratio)) * actStep;
+  };
+  const yForValue = (value: number) =>
+    padding.top + (domain.max - value) * (innerHeight / (domain.max - domain.min || 1));
+  const drawable = points
+    .map((point) => {
+      const value = readMetricValue(point.log, metric.key);
+      return value === null ? null : { ...point, value };
+    })
+    .filter((point): point is { log: WatchLog; time: number; value: number } => point !== null && Number.isFinite(point.value));
+  const path = smoothPath(drawable.map((point) => ({ x: xForActTimestamp(point.log, point.time), y: yForValue(point.value) })));
+  const classColors = ["#2f6fbd", "#39a866", "#a3a3a3", "#ef4444", "#111827"];
+
+  return (
+    <article className="sensor-timeline-chart">
+      <div className="sensor-timeline-title">
+        <h3>{metric.label}</h3>
+        <span>{metric.unit}</span>
+      </div>
+      <div className="sensor-timeline-svg-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric.label} by timestamp`}>
+          {domain.ticks.map((tick) => {
+            const y = yForValue(tick);
+            return (
+              <g key={tick}>
+                <line className="chart-grid-line" x1={padding.left} x2={width - padding.right} y1={y} y2={y} />
+                <text className="chart-y-label" x={padding.left - 8} y={y + 4} textAnchor="end">
+                  {metric.kind === "class" ? Math.round(tick) : tick.toFixed(metric.decimals)}
+                </text>
+              </g>
+            );
+          })}
+          <line className="chart-axis-line" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+          <line className="chart-axis-line" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+          {acts.map((act, index) => {
+            const x = padding.left + actStep * index + actStep / 2;
+            const range = actTimeRanges.get(act);
+            const label =
+              range && Number.isFinite(range.min) && Number.isFinite(range.max)
+                ? range.min === range.max
+                  ? timeLabel(range.min)
+                  : `${timeLabel(range.min)}-${timeLabel(range.max)}`
+                : "";
+            return (
+              <g key={act}>
+                <line className="act-minigame-line" x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} />
+                <text className="chart-x-label" x={x} y={height - 22} textAnchor="middle">
+                  {act}
+                </text>
+                <text className="chart-x-label chart-x-time-label" x={x} y={height - 8} textAnchor="middle">
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+          {metric.kind === "line" ? (
+            <>
+              <path className="sensor-timeline-line" d={path} fill="none" stroke={metric.color} />
+              {drawable.map((point, index) => (
+                <circle key={`${metric.key}-${point.time}-${index}`} cx={xForActTimestamp(point.log, point.time)} cy={yForValue(point.value)} r={2.4} fill={metric.color} />
+              ))}
+            </>
+          ) : (
+            drawable.map((point, index) => {
+              const classValue = Math.max(1, Math.min(5, Math.round(point.value)));
+              return (
+                <circle
+                  key={`${metric.key}-${point.time}-${index}`}
+                  cx={xForActTimestamp(point.log, point.time)}
+                  cy={yForValue(classValue)}
+                  r={4}
+                  fill={classColors[classValue - 1]}
+                />
+              );
+            })
+          )}
+        </svg>
+      </div>
+    </article>
   );
 }
