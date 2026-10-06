@@ -706,7 +706,9 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
         <span>
           {displayLogs.length} samples
           {activeAct !== "all" ? ` · (${formatActLabel(activeAct)})` : ""}
-          {pinnedSampleTime !== null ? " · (คลิกจุดเพื่อปลดล็อค)" : ""}
+          {pinnedSampleTime !== null
+            ? " · (ล็อคจุดอยู่ · กดย้ำที่จุดเพื่อดูจุดต่อ)"
+            : ""}
         </span>
       </div>
       <div className="sensor-timeline-stack">
@@ -718,11 +720,12 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
             selectedActLabel={
               activeAct !== "all" ? formatActLabel(activeAct) : undefined
             }
-            activeTime={activeSampleTime ?? pinnedSampleTime}
+            activeTime={pinnedSampleTime ?? activeSampleTime}
             pinnedTime={pinnedSampleTime}
             onActiveTimeChange={setActiveSampleTime}
             onTogglePin={(time) => {
               setPinnedSampleTime((prev) => (prev === time ? null : time));
+              setActiveSampleTime(time);
             }}
             onSelectAct={(act) => {
               setSelectedAct(act);
@@ -996,19 +999,103 @@ function SensorTimelineChart({
     event.stopPropagation();
     if (onTogglePin) {
       onTogglePin(point.time);
+      onActiveTimeChange(point.time);
+      setTooltip(buildTooltipData(point, clientX, clientY));
     }
   };
 
   const handlePointLeave = () => {
+    if (pinnedTime !== null) {
+      setTooltip(null);
+      return;
+    }
     onActiveTimeChange(null);
     setTooltip(null);
   };
 
-  const handleSvgClick = () => {
-    if (pinnedTime && onTogglePin) {
-      onTogglePin(pinnedTime);
-      setTooltip(null);
+  const findClosestPoint = (clientX: number, currentTarget: SVGSVGElement) => {
+    if (!drawable.length) return null;
+    const svgRect = currentTarget.getBoundingClientRect();
+    if (!svgRect.width) return null;
+    const mouseX = ((clientX - svgRect.left) / svgRect.width) * width;
+    if (mouseX < padding.left - 6 || mouseX > width - padding.right + 6) {
+      return null;
+    }
+    let closestPoint = drawable[0];
+    let closestDist = Infinity;
+    for (const pt of drawable) {
+      const ptX = xForPoint(pt.log, pt.time);
+      const dist = Math.abs(ptX - mouseX);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestPoint = pt;
+      }
+    }
+    return closestDist < 60 ? closestPoint : null;
+  };
+
+  const handleSvgPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!drawable.length) return;
+    const closest = findClosestPoint(event.clientX, event.currentTarget);
+
+    if (pinnedTime !== null) {
+      // สถานะล็อคค้างไว้: จุดและเส้นประนิ่งที่ pinnedTime ไม่เลื่อนตามเมาส์
+      // แสดง tooltip เมื่อชี้ใกล้จุดที่ล็อคไว้
+      if (closest && closest.time === pinnedTime) {
+        setTooltip(buildTooltipData(closest, event.clientX, event.clientY));
+      } else {
+        setTooltip(null);
+      }
+      return;
+    }
+
+    // สถานะ hold เพื่อดูจุด: จุดและเส้นประเลื่อนตามตำแหน่งเมาส์
+    if (closest) {
+      onActiveTimeChange(closest.time);
+      setTooltip(buildTooltipData(closest, event.clientX, event.clientY));
+    } else {
       onActiveTimeChange(null);
+      setTooltip(null);
+    }
+  };
+
+  const handleSvgPointerLeave = () => {
+    if (pinnedTime !== null) {
+      setTooltip(null);
+      return;
+    }
+    onActiveTimeChange(null);
+    setTooltip(null);
+  };
+
+  const handleSvgClick = (event: React.MouseEvent<SVGSVGElement>) => {
+    const closest = findClosestPoint(event.clientX, event.currentTarget);
+    if (!closest) {
+      if (pinnedTime && onTogglePin) {
+        onTogglePin(pinnedTime);
+        setTooltip(null);
+        onActiveTimeChange(null);
+      }
+      return;
+    }
+
+    if (pinnedTime !== null) {
+      if (closest.time === pinnedTime) {
+        // กดย้ำจุดเดิมที่คลิกค้างไว้ -> ปลดล็อค เปลี่ยนสถานะเป็น hold เพื่อดูจุด
+        onTogglePin?.(pinnedTime);
+        onActiveTimeChange(closest.time);
+        setTooltip(buildTooltipData(closest, event.clientX, event.clientY));
+      } else {
+        // คลิกจุดอื่น -> ย้ายจุดล็อคไปค้างที่จุดใหม่
+        onTogglePin?.(closest.time);
+        onActiveTimeChange(closest.time);
+        setTooltip(buildTooltipData(closest, event.clientX, event.clientY));
+      }
+    } else {
+      // อยู่ในสถานะ hold -> คลิกที่จุด -> ค้างจุดนั้นไว้!
+      onTogglePin?.(closest.time);
+      onActiveTimeChange(closest.time);
+      setTooltip(buildTooltipData(closest, event.clientX, event.clientY));
     }
   };
 
@@ -1031,6 +1118,9 @@ function SensorTimelineChart({
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={`${metric.label} by timestamp`}
+          style={{ cursor: "crosshair" }}
+          onPointerMove={handleSvgPointerMove}
+          onPointerLeave={handleSvgPointerLeave}
           onClick={handleSvgClick}
         >
           {domain.ticks.map((tick, index) => {
@@ -1115,7 +1205,10 @@ function SensorTimelineChart({
                     y={height - 22}
                     textAnchor="start"
                     style={{ cursor: onSelectAct ? "pointer" : "default" }}
-                    onClick={() => onSelectAct?.(act)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectAct?.(act);
+                    }}
                   >
                     {formatActLabel(act)}
                   </text>
@@ -1132,34 +1225,12 @@ function SensorTimelineChart({
             />
           ) : null}
           {metric.kind === "line" ? (
-            <>
-              <path
-                className="sensor-timeline-line"
-                d={path}
-                fill="none"
-                stroke={metric.color}
-              />
-              {drawable.map((point, index) => (
-                <circle
-                  key={`${metric.key}-${point.time}-${index}`}
-                  cx={xForPoint(point.log, point.time)}
-                  cy={yForValue(point.value)}
-                  r={2.4}
-                  fill={metric.color}
-                  style={{ cursor: "pointer" }}
-                  onPointerEnter={(event) =>
-                    handlePointHover(point, event.clientX, event.clientY)
-                  }
-                  onPointerMove={(event) =>
-                    handlePointHover(point, event.clientX, event.clientY)
-                  }
-                  onClick={(event) =>
-                    handlePointClick(point, event.clientX, event.clientY, event)
-                  }
-                  onPointerLeave={handlePointLeave}
-                />
-              ))}
-            </>
+            <path
+              className="sensor-timeline-line"
+              d={path}
+              fill="none"
+              stroke={metric.color}
+            />
           ) : metric.kind === "movement" ? (
             <>
               {drawable.map((point, index) => {
