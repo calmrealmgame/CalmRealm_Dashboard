@@ -7,8 +7,8 @@ import type { DashboardAccount } from "@/lib/supabase";
 import { MetricCard, PageHeader } from "./shared";
 
 const ROLE_OPTIONS = [
-  { value: "admin", label: "Admin - full access & edit users" },
-  { value: "stuff", label: "Stuff - view and export" },
+  { value: "admin", label: "Admin - full access" },
+  { value: "Staff", label: "Staff - view and export" },
   { value: "viewer", label: "Viewer - view only" },
 ] as const;
 
@@ -113,117 +113,117 @@ export function AccountsPage({ session }: { session: Session }) {
         <section className="metric-grid account-metrics">
           <MetricCard label="Dashboard Accounts" value={accounts.length} icon={Users} />
           <MetricCard label="Admins" value={accounts.filter((item) => item.role === "admin").length} icon={ShieldCheck} />
-          <MetricCard label="Stuff / Viewers" value={accounts.filter((item) => item.role !== "admin").length} icon={ShieldUser} />
+          <MetricCard label="staff / Viewers" value={accounts.filter((item) => item.role !== "admin").length} icon={ShieldUser} />
         </section>
-      <section className="account-layout">
-        <form className="account-form" onSubmit={createAccount}>
-          <h2>Create Account</h2>
-          <label>
-            Username
-            <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required />
-          </label>
-          <label>
-            Email
-            <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
-          </label>
-          <label>
-            Name
-            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
-          </label>
-          <label>
-            Role
-            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Password
-            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required />
-          </label>
-          {message ? <p className="hint">{message}</p> : null}
-          <button className="primary-button" disabled={loading}>
-            <Plus size={16} /> {loading ? "Creating..." : "Create Account"}
-          </button>
-        </form>
-        <div className="account-table">
-          <div className="table-heading">
-            <h2>Account List</h2>
-          </div>
-          <section className="table-card account-edit-table">
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Username</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accounts.length ? (
-                    accounts.map((item) => {
-                      const draft = editing[item.id] ?? { name: item.name, role: item.role };
-                      return (
-                        <tr key={item.id}>
-                          <td>{item.username}</td>
-                          <td>
-                            <input
-                              value={draft.name}
-                              onChange={(event) =>
-                                setEditing({ ...editing, [item.id]: { ...draft, name: event.target.value } })
-                              }
-                            />
-                          </td>
-                          <td>{item.email}</td>
-                          <td>
-                            <select
-                              value={draft.role}
-                              onChange={(event) =>
-                                setEditing({ ...editing, [item.id]: { ...draft, role: event.target.value } })
-                              }
-                            >
-                              {ROLE_OPTIONS.map((role) => (
-                                <option key={role.value} value={role.value}>
-                                  {role.value}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>{item.created_at}</td>
-                          <td>
-                            <div className="account-row-actions">
-                              <button className="icon-action-button" disabled={loading} onClick={() => updateAccount(item.id)} title="Save" type="button">
-                                <Save size={15} />
-                              </button>
-                              <button className="icon-action-button danger" disabled={loading} onClick={() => deleteAccount(item.id)} title="Delete" type="button">
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="empty-state">
-                        No accounts
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        <section className="account-layout">
+          <form className="account-form" onSubmit={createAccount}>
+            <h2>Create Account</h2>
+            <label>
+              Username
+              <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required />
+            </label>
+            <label>
+              Email
+              <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
+            </label>
+            <label>
+              Name
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+            </label>
+            <label>
+              Role
+              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role.value} value={role.value}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Password
+              <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required />
+            </label>
+            {message ? <p className="hint">{message}</p> : null}
+            <button className="primary-button" disabled={loading}>
+              <Plus size={16} /> {loading ? "Creating..." : "Create Account"}
+            </button>
+          </form>
+          <div className="account-table">
+            <div className="table-heading">
+              <h2>Account List</h2>
             </div>
-          </section>
-        </div>
-      </section>
-    </div>
-  </>
-);
+            <section className="table-card account-edit-table">
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Username</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accounts.length ? (
+                      accounts.map((item) => {
+                        const draft = editing[item.id] ?? { name: item.name, role: item.role };
+                        return (
+                          <tr key={item.id}>
+                            <td>{item.username}</td>
+                            <td>
+                              <input
+                                value={draft.name}
+                                onChange={(event) =>
+                                  setEditing({ ...editing, [item.id]: { ...draft, name: event.target.value } })
+                                }
+                              />
+                            </td>
+                            <td>{item.email}</td>
+                            <td>
+                              <select
+                                value={draft.role}
+                                onChange={(event) =>
+                                  setEditing({ ...editing, [item.id]: { ...draft, role: event.target.value } })
+                                }
+                              >
+                                {ROLE_OPTIONS.map((role) => (
+                                  <option key={role.value} value={role.value}>
+                                    {role.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>{item.created_at}</td>
+                            <td>
+                              <div className="account-row-actions">
+                                <button className="icon-action-button" disabled={loading} onClick={() => updateAccount(item.id)} title="Save" type="button">
+                                  <Save size={15} />
+                                </button>
+                                <button className="icon-action-button danger" disabled={loading} onClick={() => deleteAccount(item.id)} title="Delete" type="button">
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="empty-state">
+                          No accounts
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </>
+  );
 }

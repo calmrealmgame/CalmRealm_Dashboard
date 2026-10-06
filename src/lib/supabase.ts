@@ -11,7 +11,7 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_A
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type DashboardRole = "admin" | "stuff" | "viewer";
+export type DashboardRole = "admin" | "Staff" | "viewer";
 
 export type DashboardAccount = {
   id: string;

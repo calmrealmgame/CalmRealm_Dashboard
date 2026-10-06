@@ -23,7 +23,7 @@ function createAdminClient() {
   });
 }
 
-const DASHBOARD_ROLES = ["admin", "stuff", "viewer"] as const;
+const DASHBOARD_ROLES = ["admin", "Staff", "viewer"] as const;
 
 function normalizeRole(value: unknown) {
   return DASHBOARD_ROLES.includes(value as (typeof DASHBOARD_ROLES)[number])

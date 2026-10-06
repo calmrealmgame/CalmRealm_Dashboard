@@ -181,18 +181,6 @@ export function ParticipantWatchProfile({
 
   return (
     <>
-      <section className="participant-detail-hero">
-        <div>
-          <span>Participant</span>
-          <strong>{selectedUser.user}</strong>
-          <small>
-            {selectedUser.age ?? "-"} years ·{" "}
-            {DEMOGRAPHIC_SEXES.find((sex) => sex.key === selectedUser.sex)
-              ?.label ?? selectedUser.sex}
-            {selectedUser.school ? ` · ${selectedUser.school}` : ""}
-          </small>
-        </div>
-      </section>
       <section className="dashboard-layout overview-layout participant-watch-layout">
         <div className="main-stack">
           <button
@@ -203,10 +191,9 @@ export function ParticipantWatchProfile({
           >
             <div>
               <h2>Sensor Summary</h2>
-              <p>Timestamp trends by login session for this participant.</p>
             </div>
             <ChevronDown
-              size={20}
+              size={18}
               className={`collapsible-chevron${sensorSummaryOpen ? " collapsible-chevron--open" : ""
                 }`}
             />
@@ -222,7 +209,7 @@ export function ParticipantWatchProfile({
           {!canExport ? (
             <p className="hint">
               Viewer role can view data only. Export is available for admin and
-              stuff.
+              staff.
             </p>
           ) : null}
           <DataTable
@@ -461,7 +448,7 @@ type ChartTooltip = {
 const TIMELINE_METRICS: TimelineMetric[] = [
   {
     key: "ppg",
-    label: "PPG — Heart Rate",
+    label: "PPG",
     unit: "BPM",
     color: "#2f6fbd",
     kind: "line",
@@ -469,7 +456,7 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "hrv",
-    label: "HRV — RMSSD",
+    label: "HRV",
     unit: "ms",
     color: "#39a866",
     kind: "line",
@@ -477,7 +464,7 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "eda",
-    label: "EDA — Skin Conductance",
+    label: "EDA",
     unit: "µS",
     color: "#9b5bd6",
     kind: "line",
@@ -485,7 +472,7 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "imu",
-    label: "IMU — Movement",
+    label: "IMU",
     unit: "g",
     color: "#f59e0b",
     kind: "line",
@@ -493,8 +480,8 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "class",
-    label: "EMS — Emotion Level",
-    unit: "Emotion 1-5",
+    label: "Emotion Level",
+    unit: "",
     color: "#ef4444",
     kind: "line",
     decimals: 0,
@@ -546,6 +533,21 @@ function formatClassValue(value: number | null) {
 function emotionFromValue(value: number) {
   const classValue = Math.max(1, Math.min(5, Math.round(value)));
   return EMOTION_LEVELS[classValue - 1];
+}
+
+function emotionLineColor(value: number) {
+  const stops = [
+    { value: 1, color: [47, 111, 189] },
+    { value: 3, color: [155, 91, 214] },
+    { value: 5, color: [239, 68, 68] },
+  ] as const;
+  const clamped = Math.max(1, Math.min(5, value));
+  const start = clamped <= 3 ? stops[0] : stops[1];
+  const end = clamped <= 3 ? stops[1] : stops[2];
+  const ratio = (clamped - start.value) / (end.value - start.value || 1);
+  const channel = (index: number) =>
+    Math.round(start.color[index] + (end.color[index] - start.color[index]) * ratio);
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
 }
 
 function timeLabel(value: number) {
@@ -658,14 +660,7 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
   return (
     <section className="sensor-timeline-panel">
       <div className="sensor-timeline-toolbar">
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-            alignItems: "end",
-          }}
-        >
+        <div className="sensor-timeline-toolbar-left">
           <label>
             Login session
             <select
@@ -703,13 +698,18 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
             </select>
           </label>
         </div>
-        <span>
-          {displayLogs.length} samples
-          {activeAct !== "all" ? ` · (${formatActLabel(activeAct)})` : ""}
-          {pinnedSampleTime !== null
-            ? " · (ล็อคจุดอยู่ · กดย้ำที่จุดเพื่อดูจุดต่อ)"
-            : ""}
-        </span>
+        <div className="sensor-timeline-toolbar-right">
+          <span className="timeline-swipe-hint">
+            ↔ เลื่อนดูกราฟเต็ม
+          </span>
+          <span>
+            {displayLogs.length} samples
+            {activeAct !== "all" ? ` · (${formatActLabel(activeAct)})` : ""}
+            {pinnedSampleTime !== null
+              ? " · (Point locked, Click again to unlock)"
+              : ""}
+          </span>
+        </div>
       </div>
       <div className="sensor-timeline-stack">
         {TIMELINE_METRICS.map((metric) => (
@@ -739,6 +739,9 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
   );
 }
 
+export const TIMELINE_CHART_HEIGHT = 98;
+export const TIMELINE_CHART_HEIGHT_CLASS = 108;
+
 function SensorTimelineChart({
   metric,
   points,
@@ -761,12 +764,15 @@ function SensorTimelineChart({
   const [tooltip, setTooltip] = useState<ChartTooltip | null>(null);
 
   const width = 1180;
-  const height = metric.kind === "class" ? 116 : 150;
+  const height =
+    metric.kind === "class"
+      ? TIMELINE_CHART_HEIGHT_CLASS
+      : TIMELINE_CHART_HEIGHT;
   const padding = {
-    top: 16,
-    right: metric.kind === "class" ? 290 : metric.kind === "movement" ? 90 : 22,
-    bottom: 34,
-    left: metric.kind === "class" ? 68 : 54,
+    top: 4,
+    right: metric.kind === "class" ? 280 : metric.kind === "movement" ? 80 : 16,
+    bottom: 16,
+    left: metric.kind === "class" ? 60 : 44,
   };
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
@@ -1059,6 +1065,10 @@ function SensorTimelineChart({
     }
   };
 
+  const handleSvgPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    handleSvgPointerMove(event);
+  };
+
   const handleSvgPointerLeave = () => {
     if (pinnedTime !== null) {
       setTooltip(null);
@@ -1103,6 +1113,36 @@ function SensorTimelineChart({
     activeTime === null
       ? null
       : (drawable.find((point) => point.time === activeTime) ?? null);
+  const emotionSegments =
+    metric.key === "class"
+      ? drawable.slice(1).map((point, index) => {
+        const previous = drawable[index];
+        const x1 = xForPoint(previous.log, previous.time);
+        const y1 = yForValue(previous.value);
+        const x2 = xForPoint(point.log, point.time);
+        const y2 = yForValue(point.value);
+        return {
+          id: `emotion-segment-${metric.key}-${index}`,
+          d: `M ${x1} ${y1} L ${x2} ${y2}`,
+          x1,
+          y1,
+          x2,
+          y2,
+          startColor: emotionLineColor(previous.value),
+          endColor: emotionLineColor(point.value),
+        };
+      })
+      : [];
+  const pinnedPoint =
+    pinnedTime === null || pinnedTime === undefined
+      ? null
+      : (drawable.find((point) => point.time === pinnedTime) ?? null);
+  const titleValue =
+    pinnedPoint === null
+      ? metric.unit
+      : metric.kind === "class"
+        ? `${Math.max(1, Math.min(5, Math.round(pinnedPoint.value)))}`
+        : `${pinnedPoint.value.toFixed(metric.decimals)} ${metric.unit}`;
 
   return (
     <article className="sensor-timeline-chart">
@@ -1111,18 +1151,39 @@ function SensorTimelineChart({
           {metric.label}
           {selectedActLabel ? ` — ${selectedActLabel}` : ""}
         </h3>
-        <span>{metric.unit}</span>
+        <span className={pinnedPoint ? "sensor-timeline-title-value" : ""}>
+          {titleValue}
+        </span>
       </div>
       <div className="sensor-timeline-svg-wrap">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={`${metric.label} by timestamp`}
-          style={{ cursor: "crosshair" }}
+          style={{ cursor: "crosshair", touchAction: "pan-x pan-y" }}
+          onPointerDown={handleSvgPointerDown}
           onPointerMove={handleSvgPointerMove}
           onPointerLeave={handleSvgPointerLeave}
           onClick={handleSvgClick}
         >
+          {metric.key === "class" ? (
+            <defs>
+              {emotionSegments.map((segment) => (
+                <linearGradient
+                  key={segment.id}
+                  id={segment.id}
+                  gradientUnits="userSpaceOnUse"
+                  x1={segment.x1}
+                  y1={segment.y1}
+                  x2={segment.x2}
+                  y2={segment.y2}
+                >
+                  <stop offset="0%" stopColor={segment.startColor} />
+                  <stop offset="100%" stopColor={segment.endColor} />
+                </linearGradient>
+              ))}
+            </defs>
+          ) : null}
           {domain.ticks.map((tick, index) => {
             const y = yForValue(tick);
             return (
@@ -1178,7 +1239,7 @@ function SensorTimelineChart({
                 <text
                   className="chart-x-label"
                   x={tick.x}
-                  y={height - 22}
+                  y={height - 5}
                   textAnchor="middle"
                 >
                   {tick.label}
@@ -1202,7 +1263,7 @@ function SensorTimelineChart({
                   <text
                     className="chart-x-label"
                     x={actStartX + 2}
-                    y={height - 22}
+                    y={height - 5}
                     textAnchor="start"
                     style={{ cursor: onSelectAct ? "pointer" : "default" }}
                     onClick={(event) => {
@@ -1224,7 +1285,19 @@ function SensorTimelineChart({
               y2={height - padding.bottom}
             />
           ) : null}
-          {metric.kind === "line" ? (
+          {metric.key === "class" ? (
+            <>
+              {emotionSegments.map((segment) => (
+                <path
+                  key={segment.id}
+                  className="sensor-timeline-line"
+                  d={segment.d}
+                  fill="none"
+                  stroke={`url(#${segment.id})`}
+                />
+              ))}
+            </>
+          ) : metric.kind === "line" ? (
             <path
               className="sensor-timeline-line"
               d={path}
@@ -1262,12 +1335,12 @@ function SensorTimelineChart({
               })}
               <g
                 className="movement-legend"
-                transform={`translate(${width - padding.right + 16} ${padding.top + 4})`}
+                transform={`translate(${width - padding.right + 12} ${padding.top + 2})`}
               >
                 {MOVEMENT_LEVELS.map((level, index) => (
-                  <g key={level.label} transform={`translate(0 ${index * 18})`}>
-                    <rect width={9} height={9} fill={level.color} rx={1} />
-                    <text x={14} y={8}>
+                  <g key={level.label} transform={`translate(0 ${index * 14})`}>
+                    <rect width={8} height={8} fill={level.color} rx={1} />
+                    <text x={12} y={7} style={{ fontSize: "10px" }}>
                       {level.label}
                     </text>
                   </g>
@@ -1283,7 +1356,7 @@ function SensorTimelineChart({
                     key={`${metric.key}-${point.time}-${index}`}
                     cx={xForPoint(point.log, point.time)}
                     cy={yForValue(emotion.value)}
-                    r={4}
+                    r={3}
                     fill={emotion.color}
                     style={{ cursor: "pointer" }}
                     onPointerEnter={(event) =>
@@ -1301,15 +1374,15 @@ function SensorTimelineChart({
               })}
               <g
                 className="emotion-legend"
-                transform={`translate(${width - padding.right + 16} ${padding.top + 2})`}
+                transform={`translate(${width - padding.right + 12} ${padding.top + 1})`}
               >
                 {EMOTION_LEVELS.map((emotion, index) => (
                   <g
                     key={emotion.value}
-                    transform={`translate(${index * 54} 0)`}
+                    transform={`translate(${index * 52} 0)`}
                   >
-                    <circle cx={4} cy={4} r={3.5} fill={emotion.color} />
-                    <text x={12} y={8}>
+                    <circle cx={4} cy={4} r={3} fill={emotion.color} />
+                    <text x={11} y={7} style={{ fontSize: "10px" }}>
                       {emotion.label}
                     </text>
                   </g>
@@ -1337,7 +1410,17 @@ function SensorTimelineChart({
       {tooltip ? (
         <div
           className="chart-tooltip"
-          style={{ left: tooltip.x, top: tooltip.y }}
+          style={{
+            left:
+              typeof window !== "undefined"
+                ? Math.max(80, Math.min(window.innerWidth - 80, tooltip.x))
+                : tooltip.x,
+            top: tooltip.y < 120 ? tooltip.y + 16 : tooltip.y,
+            transform:
+              tooltip.y < 120
+                ? "translate(-50%, 0)"
+                : "translate(-50%, calc(-100% - 12px))",
+          }}
         >
           <strong>{tooltip.title}</strong>
           {tooltip.rows.map((row) => (

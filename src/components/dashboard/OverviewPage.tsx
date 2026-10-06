@@ -187,14 +187,30 @@ export function OverviewPage({
   });
 
   if (selectedWatchUserId !== null) {
+    const selectedUser = participants.find(
+      (u) => u.userId === selectedWatchUserId,
+    );
+    const userName = selectedUser
+      ? participantName(selectedUser)
+      : `User ${selectedWatchUserId}`;
+    const userSub = selectedUser
+      ? [
+          selectedUser.age != null ? `${selectedUser.age} years` : null,
+          selectedUser.gender || null,
+          selectedUser.school || null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "Participant watch profile and timestamp sensor data.";
+
     return (
       <>
         <PageHeader
-          title="Overview"
-          description="Participant watch profile and timestamp sensor data."
+          title={userName}
+          description={userSub}
           onBack={() => setSelectedWatchUserId(null)}
         />
-        <div className="page-body">
+        <div className="page-body participant-watch-body">
           <ParticipantWatchProfile
             participants={participants}
             watchLogs={watchLogs}
@@ -248,7 +264,7 @@ export function OverviewPage({
             {!canExport ? (
               <p className="hint">
                 Viewer role can view data only. Export is available for admin
-                and stuff.
+                and staff.
               </p>
             ) : null}
             <ParticipantProgressTable

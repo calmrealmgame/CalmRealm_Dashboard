@@ -79,7 +79,7 @@ export default function Home() {
       if (error) {
         setAccount(null);
         setDataError(
-          "Signed in, but no DashboardAccount profile was found. Run supabase-dashboard-setup.sql and add this auth user as admin/stuff/viewer.",
+          "Signed in, but no DashboardAccount profile was found. Run supabase-dashboard-setup.sql and add this auth user as admin/staff/viewer.",
         );
         return;
       }
@@ -111,7 +111,7 @@ export default function Home() {
     loadDashboardData();
   }, [session]);
 
-  const canExport = account?.role === "admin" || account?.role === "stuff";
+  const canExport = account?.role === "admin" || account?.role === "Staff";
 
   if (authLoading) {
     return <div className="center-screen">Loading dashboard...</div>;
@@ -173,7 +173,7 @@ export default function Home() {
 
 function formatDashboardRole(role: DashboardAccount["role"] | undefined) {
   if (role === "admin") return "Admin";
-  if (role === "stuff") return "Stuff";
+  if (role === "Staff") return "staff";
   if (role === "viewer") return "Viewer";
   return "No role";
 }
