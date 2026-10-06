@@ -229,7 +229,10 @@ export function ParticipantWatchProfile({
           ) : null}
           <DataTable
             rows={selectedUserSamples}
-            exportFilename={`watch-samples-${selectedUser.userId}.csv`}
+            exportFilename={`${(selectedUser.user || `User_${selectedUser.userId}`)
+              .trim()
+              .replace(/[/\\?%*:|"<>]/g, "")
+              .replace(/\s+/g, "_")}_WatchSamples.csv`}
             canExport={canExport}
           />
         </div>
