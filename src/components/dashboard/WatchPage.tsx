@@ -197,9 +197,8 @@ export function ParticipantWatchProfile({
         <div className="main-stack">
           <button
             type="button"
-            className={`collapsible-heading table-heading secondary-heading${
-              sensorSummaryOpen ? " collapsible-heading--open" : ""
-            }`}
+            className={`collapsible-heading table-heading secondary-heading${sensorSummaryOpen ? " collapsible-heading--open" : ""
+              }`}
             onClick={() => setSensorSummaryOpen((prev) => !prev)}
           >
             <div>
@@ -208,9 +207,8 @@ export function ParticipantWatchProfile({
             </div>
             <ChevronDown
               size={20}
-              className={`collapsible-chevron${
-                sensorSummaryOpen ? " collapsible-chevron--open" : ""
-              }`}
+              className={`collapsible-chevron${sensorSummaryOpen ? " collapsible-chevron--open" : ""
+                }`}
             />
           </button>
           {sensorSummaryOpen ? (
@@ -526,18 +524,18 @@ function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
   if (metric === "hrv") {
     return finite(
       asNumber(log.HRV) ??
-        asNumber(log.hrv) ??
-        asNumber(log.RMSSD) ??
-        asNumber(log.rmssd) ??
-        asNumber(log.HRV_RMSSD),
+      asNumber(log.hrv) ??
+      asNumber(log.RMSSD) ??
+      asNumber(log.rmssd) ??
+      asNumber(log.HRV_RMSSD),
     );
   }
   return finite(
     asNumber(log.EMS) ??
-      asNumber(log.ems) ??
-      asNumber(log.Class) ??
-      asNumber(log.class) ??
-      asNumber(log.emotionValue),
+    asNumber(log.ems) ??
+    asNumber(log.Class) ??
+    asNumber(log.class) ??
+    asNumber(log.emotionValue),
   );
 }
 
@@ -607,51 +605,130 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
   );
   const defaultSession = sessionOptions.length ? String(sessionOptions[0]) : "";
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [selectedAct, setSelectedAct] = useState<string>("all");
   const [activeSampleTime, setActiveSampleTime] = useState<number | null>(null);
+  const [pinnedSampleTime, setPinnedSampleTime] = useState<number | null>(null);
   const activeSession =
     selectedSession === null ||
-    !sessionOptions.map(String).includes(selectedSession)
+      !sessionOptions.map(String).includes(selectedSession)
       ? defaultSession
       : selectedSession;
 
   const visibleLogs = logs.filter(
     (log) => String(log.LoginSession ?? "") === activeSession,
   );
-  const timedLogs = visibleLogs
-    .map((log) => ({ log, time: timestampMs(log.timestamp) }))
-    .filter((item): item is { log: WatchLog; time: number } =>
-      Number.isFinite(item.time),
+  const timedLogs = useMemo(
+    () =>
+      visibleLogs
+        .map((log) => ({ log, time: timestampMs(log.timestamp) }))
+        .filter((item): item is { log: WatchLog; time: number } =>
+          Number.isFinite(item.time),
+        )
+        .sort((a, b) => a.time - b.time),
+    [visibleLogs],
+  );
+
+  const availableActs = useMemo(() => {
+    const actFirstTime = new Map<string, number>();
+    timedLogs.forEach((item) => {
+      const act = item.log.act?.trim().toLowerCase() || "";
+      if (act && (!actFirstTime.has(act) || item.time < actFirstTime.get(act)!)) {
+        actFirstTime.set(act, item.time);
+      }
+    });
+    return Array.from(actFirstTime.keys()).sort((a, b) => {
+      const diff = (actFirstTime.get(a) ?? 0) - (actFirstTime.get(b) ?? 0);
+      if (diff !== 0) return diff;
+      return sortActs([a, b])[0] === a ? -1 : 1;
+    });
+  }, [timedLogs]);
+
+  const activeAct =
+    selectedAct === "all" || availableActs.includes(selectedAct)
+      ? selectedAct
+      : "all";
+
+  const displayLogs = useMemo(() => {
+    if (activeAct === "all") return timedLogs;
+    return timedLogs.filter(
+      (item) => (item.log.act?.trim().toLowerCase() || "") === activeAct,
     );
+  }, [timedLogs, activeAct]);
 
   return (
     <section className="sensor-timeline-panel">
       <div className="sensor-timeline-toolbar">
-        <label>
-          Login session
-          <select
-            value={activeSession}
-            onChange={(event) => {
-              setSelectedSession(event.target.value);
-              setActiveSampleTime(null);
-            }}
-          >
-            {sessionOptions.map((value) => (
-              <option key={value} value={String(value)}>
-                Session {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span>{timedLogs.length} samples</span>
+        <div
+          style={{
+            display: "flex",
+            gap: "16px",
+            flexWrap: "wrap",
+            alignItems: "end",
+          }}
+        >
+          <label>
+            Login session
+            <select
+              value={activeSession}
+              onChange={(event) => {
+                setSelectedSession(event.target.value);
+                setSelectedAct("all");
+                setActiveSampleTime(null);
+                setPinnedSampleTime(null);
+              }}
+            >
+              {sessionOptions.map((value) => (
+                <option key={value} value={String(value)}>
+                  Session {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Act / Minigame
+            <select
+              value={activeAct}
+              onChange={(event) => {
+                setSelectedAct(event.target.value);
+                setActiveSampleTime(null);
+                setPinnedSampleTime(null);
+              }}
+            >
+              <option value="all">All ACTs</option>
+              {availableActs.map((act) => (
+                <option key={act} value={act}>
+                  {formatActLabel(act)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <span>
+          {displayLogs.length} samples
+          {activeAct !== "all" ? ` · (${formatActLabel(activeAct)})` : ""}
+          {pinnedSampleTime !== null ? " · (คลิกจุดเพื่อปลดล็อค)" : ""}
+        </span>
       </div>
       <div className="sensor-timeline-stack">
         {TIMELINE_METRICS.map((metric) => (
           <SensorTimelineChart
             key={metric.key}
             metric={metric}
-            points={timedLogs}
-            activeTime={activeSampleTime}
+            points={displayLogs}
+            selectedActLabel={
+              activeAct !== "all" ? formatActLabel(activeAct) : undefined
+            }
+            activeTime={activeSampleTime ?? pinnedSampleTime}
+            pinnedTime={pinnedSampleTime}
             onActiveTimeChange={setActiveSampleTime}
+            onTogglePin={(time) => {
+              setPinnedSampleTime((prev) => (prev === time ? null : time));
+            }}
+            onSelectAct={(act) => {
+              setSelectedAct(act);
+              setActiveSampleTime(null);
+              setPinnedSampleTime(null);
+            }}
           />
         ))}
       </div>
@@ -662,15 +739,24 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
 function SensorTimelineChart({
   metric,
   points,
+  selectedActLabel,
   activeTime,
+  pinnedTime,
   onActiveTimeChange,
+  onTogglePin,
+  onSelectAct,
 }: {
   metric: TimelineMetric;
   points: { log: WatchLog; time: number }[];
+  selectedActLabel?: string;
   activeTime: number | null;
+  pinnedTime?: number | null;
   onActiveTimeChange: (time: number | null) => void;
+  onTogglePin?: (time: number) => void;
+  onSelectAct?: (act: string) => void;
 }) {
   const [tooltip, setTooltip] = useState<ChartTooltip | null>(null);
+
   const width = 1180;
   const height = metric.kind === "class" ? 116 : 150;
   const padding = {
@@ -687,39 +773,138 @@ function SensorTimelineChart({
       (value): value is number => value !== null && Number.isFinite(value),
     );
   const domain = metricDomain(values, metric);
-  const acts = sortActs(
-    Array.from(
+
+  const acts = useMemo(() => {
+    const rawActs = Array.from(
       new Set(
         points
           .map((point) => point.log.act?.trim().toLowerCase() || "unknown")
           .filter(Boolean),
       ),
-    ),
-  );
-  const actStep = acts.length ? innerWidth / acts.length : innerWidth;
-  const actTimeRanges = new Map(
-    acts.map((act) => {
+    );
+    const actFirstTime = new Map<string, number>();
+    points.forEach((point) => {
+      const act = point.log.act?.trim().toLowerCase() || "unknown";
+      if (!actFirstTime.has(act) || point.time < actFirstTime.get(act)!) {
+        actFirstTime.set(act, point.time);
+      }
+    });
+    return rawActs.sort((a, b) => {
+      const diff = (actFirstTime.get(a) ?? 0) - (actFirstTime.get(b) ?? 0);
+      if (diff !== 0) return diff;
+      return sortActs([a, b])[0] === a ? -1 : 1;
+    });
+  }, [points]);
+
+  const actLayout = useMemo(() => {
+    if (acts.length === 0) {
+      return {
+        actPositions: new Map<
+          string,
+          { startX: number; width: number; minTime: number; maxTime: number }
+        >(),
+        timeTicks: [] as { x: number; label: string }[],
+      };
+    }
+
+    if (acts.length === 1) {
+      const act = acts[0];
+      const actTimes = points.map((p) => p.time).filter(Number.isFinite);
+      const minTime = actTimes.length ? Math.min(...actTimes) : 0;
+      const maxTime = actTimes.length ? Math.max(...actTimes) : 0;
+      const durationSec = Math.max(1, Math.round((maxTime - minTime) / 1000));
+
+      const tickInterval =
+        durationSec <= 30
+          ? 5
+          : durationSec <= 90
+            ? 15
+            : durationSec <= 300
+              ? 30
+              : durationSec <= 600
+                ? 60
+                : 120;
+
+      const timeTicks: { x: number; label: string }[] = [];
+      for (let s = 0; s <= durationSec; s += tickInterval) {
+        const ratio = s / (durationSec || 1);
+        const x = padding.left + ratio * innerWidth;
+        const mins = Math.floor(s / 60);
+        const secs = s % 60;
+        const label = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+        timeTicks.push({ x, label });
+      }
+
+      const actPositions = new Map<
+        string,
+        { startX: number; width: number; minTime: number; maxTime: number }
+      >();
+      actPositions.set(act, {
+        startX: padding.left,
+        width: innerWidth,
+        minTime,
+        maxTime,
+      });
+
+      return { actPositions, timeTicks };
+    }
+
+    const actData = acts.map((act) => {
       const actTimes = points
         .filter(
           (point) =>
             (point.log.act?.trim().toLowerCase() || "unknown") === act,
         )
         .map((point) => point.time);
-      return [act, { min: Math.min(...actTimes), max: Math.max(...actTimes) }];
-    }),
-  );
+      const minTime = actTimes.length ? Math.min(...actTimes) : 0;
+      const maxTime = actTimes.length ? Math.max(...actTimes) : 0;
+      const duration = Math.max(15000, maxTime - minTime);
+      return { act, minTime, maxTime, duration };
+    });
+
+    const minActWidth = 65;
+    const baseTotalWidth = minActWidth * acts.length;
+    const extraTotalWidth = Math.max(0, innerWidth - baseTotalWidth);
+    const totalDuration = actData.reduce((acc, d) => acc + d.duration, 0);
+
+    let currentX = padding.left;
+    const actPositions = new Map<
+      string,
+      { startX: number; width: number; minTime: number; maxTime: number }
+    >();
+
+    actData.forEach((item, index) => {
+      const extra =
+        totalDuration > 0
+          ? (item.duration / totalDuration) * extraTotalWidth
+          : extraTotalWidth / acts.length;
+      const width =
+        index === acts.length - 1
+          ? padding.left + innerWidth - currentX
+          : minActWidth + extra;
+
+      actPositions.set(item.act, {
+        startX: currentX,
+        width,
+        minTime: item.minTime,
+        maxTime: item.maxTime,
+      });
+      currentX += width;
+    });
+
+    return { actPositions, timeTicks: [] };
+  }, [acts, points, innerWidth, padding.left]);
+
   const xForPoint = (log: WatchLog, time: number) => {
     const act = log.act?.trim().toLowerCase() || "unknown";
-    const actIndex = Math.max(0, acts.indexOf(act));
-    const range = actTimeRanges.get(act);
+    const pos = actLayout.actPositions.get(act);
+    if (!pos) return padding.left;
+    const span = pos.maxTime - pos.minTime;
     const ratio =
-      range &&
-      Number.isFinite(range.min) &&
-      Number.isFinite(range.max) &&
-      range.max > range.min
-        ? (time - range.min) / (range.max - range.min)
+      span > 0
+        ? Math.max(0, Math.min(1, (time - pos.minTime) / span))
         : 0.5;
-    return padding.left + actStep * actIndex + ratio * actStep;
+    return pos.startX + ratio * pos.width;
   };
   const yForValue = (value: number) =>
     padding.top +
@@ -745,12 +930,12 @@ function SensorTimelineChart({
     2,
     Math.min(5, innerWidth / Math.max(drawable.length, 1) / 1.6),
   );
-  const tooltipForPoint = (
+
+  const buildTooltipData = (
     point: { log: WatchLog; time: number; value: number },
     clientX: number,
     clientY: number,
   ) => {
-    onActiveTimeChange(point.time);
     const act = formatActLabel(point.log.act?.trim() || "Unknown");
     const color =
       metric.kind === "movement"
@@ -785,17 +970,48 @@ function SensorTimelineChart({
         color,
       });
     }
-    setTooltip({
+    return {
       x: clientX,
       y: clientY,
       title: formatTimestamp(point.log.timestamp) || timeLabel(point.time),
       rows,
-    });
+    };
   };
-  const clearActivePoint = () => {
-    setTooltip(null);
+
+  const handlePointHover = (
+    point: { log: WatchLog; time: number; value: number },
+    clientX: number,
+    clientY: number,
+  ) => {
+    onActiveTimeChange(point.time);
+    setTooltip(buildTooltipData(point, clientX, clientY));
+  };
+
+  const handlePointClick = (
+    point: { log: WatchLog; time: number; value: number },
+    clientX: number,
+    clientY: number,
+    event: React.MouseEvent,
+  ) => {
+    event.stopPropagation();
+    if (onTogglePin) {
+      onTogglePin(point.time);
+    }
+  };
+
+  const handlePointLeave = () => {
     onActiveTimeChange(null);
+    setTooltip(null);
   };
+
+  const handleSvgClick = () => {
+    if (pinnedTime && onTogglePin) {
+      onTogglePin(pinnedTime);
+      setTooltip(null);
+      onActiveTimeChange(null);
+    }
+  };
+
   const activePoint =
     activeTime === null
       ? null
@@ -804,7 +1020,10 @@ function SensorTimelineChart({
   return (
     <article className="sensor-timeline-chart">
       <div className="sensor-timeline-title">
-        <h3>{metric.label}</h3>
+        <h3>
+          {metric.label}
+          {selectedActLabel ? ` — ${selectedActLabel}` : ""}
+        </h3>
         <span>{metric.unit}</span>
       </div>
       <div className="sensor-timeline-svg-wrap">
@@ -812,6 +1031,7 @@ function SensorTimelineChart({
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={`${metric.label} by timestamp`}
+          onClick={handleSvgClick}
         >
           {domain.ticks.map((tick, index) => {
             const y = yForValue(tick);
@@ -853,28 +1073,55 @@ function SensorTimelineChart({
             y1={height - padding.bottom}
             y2={height - padding.bottom}
           />
-          {acts.map((act, index) => {
-            const x = padding.left + actStep * index + actStep / 2;
-            return (
-              <g key={`${metric.key}-act-${act}`}>
-                <line
-                  className="chart-time-grid-line"
-                  x1={x}
-                  x2={x}
-                  y1={padding.top}
-                  y2={height - padding.bottom}
-                />
+          {actLayout.timeTicks.length > 0
+            ? actLayout.timeTicks.map((tick, idx) => (
+              <g key={`tick-${tick.label}-${idx}`}>
+                {idx > 0 ? (
+                  <line
+                    className="chart-time-grid-line"
+                    x1={tick.x}
+                    x2={tick.x}
+                    y1={padding.top}
+                    y2={height - padding.bottom}
+                  />
+                ) : null}
                 <text
                   className="chart-x-label"
-                  x={x}
+                  x={tick.x}
                   y={height - 22}
                   textAnchor="middle"
                 >
-                  {formatActLabel(act)}
+                  {tick.label}
                 </text>
               </g>
-            );
-          })}
+            ))
+            : acts.map((act, index) => {
+              const pos = actLayout.actPositions.get(act);
+              const actStartX = pos ? pos.startX : padding.left;
+              return (
+                <g key={`${metric.key}-act-${act}`}>
+                  {index > 0 ? (
+                    <line
+                      className="chart-time-grid-line"
+                      x1={actStartX}
+                      x2={actStartX}
+                      y1={padding.top}
+                      y2={height - padding.bottom}
+                    />
+                  ) : null}
+                  <text
+                    className="chart-x-label"
+                    x={actStartX + 2}
+                    y={height - 22}
+                    textAnchor="start"
+                    style={{ cursor: onSelectAct ? "pointer" : "default" }}
+                    onClick={() => onSelectAct?.(act)}
+                  >
+                    {formatActLabel(act)}
+                  </text>
+                </g>
+              );
+            })}
           {activePoint ? (
             <line
               className="sensor-sync-line"
@@ -899,18 +1146,17 @@ function SensorTimelineChart({
                   cy={yForValue(point.value)}
                   r={2.4}
                   fill={metric.color}
+                  style={{ cursor: "pointer" }}
                   onPointerEnter={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
+                    handlePointHover(point, event.clientX, event.clientY)
                   }
                   onPointerMove={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
+                    handlePointHover(point, event.clientX, event.clientY)
                   }
-                  onPointerDown={(event) =>
-                    tooltipForPoint(point, event.clientX, event.clientY)
+                  onClick={(event) =>
+                    handlePointClick(point, event.clientX, event.clientY, event)
                   }
-                  onPointerLeave={clearActivePoint}
-                  onPointerUp={clearActivePoint}
-                  onPointerCancel={clearActivePoint}
+                  onPointerLeave={handlePointLeave}
                 />
               ))}
             </>
@@ -929,18 +1175,17 @@ function SensorTimelineChart({
                     height={Math.max(2, Math.abs(movementBaseY - y))}
                     rx={0.8}
                     fill={movementColor(point.value, domain)}
+                    style={{ cursor: "pointer" }}
                     onPointerEnter={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                      handlePointHover(point, event.clientX, event.clientY)
                     }
                     onPointerMove={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                      handlePointHover(point, event.clientX, event.clientY)
                     }
-                    onPointerDown={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                    onClick={(event) =>
+                      handlePointClick(point, event.clientX, event.clientY, event)
                     }
-                    onPointerLeave={clearActivePoint}
-                    onPointerUp={clearActivePoint}
-                    onPointerCancel={clearActivePoint}
+                    onPointerLeave={handlePointLeave}
                   />
                 );
               })}
@@ -969,18 +1214,17 @@ function SensorTimelineChart({
                     cy={yForValue(emotion.value)}
                     r={4}
                     fill={emotion.color}
+                    style={{ cursor: "pointer" }}
                     onPointerEnter={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                      handlePointHover(point, event.clientX, event.clientY)
                     }
                     onPointerMove={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                      handlePointHover(point, event.clientX, event.clientY)
                     }
-                    onPointerDown={(event) =>
-                      tooltipForPoint(point, event.clientX, event.clientY)
+                    onClick={(event) =>
+                      handlePointClick(point, event.clientX, event.clientY, event)
                     }
-                    onPointerLeave={clearActivePoint}
-                    onPointerUp={clearActivePoint}
-                    onPointerCancel={clearActivePoint}
+                    onPointerLeave={handlePointLeave}
                   />
                 );
               })}
@@ -1007,7 +1251,7 @@ function SensorTimelineChart({
               className="sensor-sync-dot"
               cx={xForPoint(activePoint.log, activePoint.time)}
               cy={yForValue(activePoint.value)}
-              r={4.5}
+              r={pinnedTime === activePoint.time ? 5.5 : 4.5}
               fill={
                 metric.kind === "class"
                   ? emotionFromValue(activePoint.value).color
