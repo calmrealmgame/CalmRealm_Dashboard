@@ -14,6 +14,33 @@ import { supabase } from "@/lib/supabase";
 import type { DashboardAccount, Participant, SceneData, WatchLog } from "@/lib/supabase";
 
 type PageName = "overview" | "accounts";
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function loadAllRows<T>(
+  table: string,
+  orderColumn: string,
+  ascending = false,
+) {
+  const rows: T[] = [];
+  let page = 0;
+
+  while (true) {
+    const from = page * SUPABASE_PAGE_SIZE;
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .order(orderColumn, { ascending })
+      .range(from, to);
+
+    if (error) throw error;
+    rows.push(...((data ?? []) as T[]));
+    if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+    page += 1;
+  }
+
+  return rows;
+}
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
@@ -65,21 +92,21 @@ export default function Home() {
   useEffect(() => {
     async function loadDashboardData() {
       if (!session) return;
-      const [usersResult, scenesResult, watchResult] = await Promise.all([
-        supabase.from("User").select("*").order("created_at", { ascending: false }),
-        supabase.from("SceneData").select("*").order("createdAt", { ascending: false }),
-        supabase.from("Watch Log").select("*").order("timestamp", { ascending: false }),
-      ]);
+      try {
+        const [users, scenes, watch] = await Promise.all([
+          loadAllRows<Participant>("User", "created_at"),
+          loadAllRows<SceneData>("SceneData", "createdAt"),
+          loadAllRows<WatchLog>("Watch Log", "timestamp"),
+        ]);
 
-      const error = usersResult.error || scenesResult.error || watchResult.error;
-      if (error) {
-        setDataError(error.message);
+        setParticipants(users);
+        setSceneData(scenes);
+        setWatchLogs(watch);
+        setDataError("");
+      } catch (error) {
+        setDataError(error instanceof Error ? error.message : String(error));
         return;
       }
-
-      setParticipants((usersResult.data ?? []) as Participant[]);
-      setSceneData((scenesResult.data ?? []) as SceneData[]);
-      setWatchLogs((watchResult.data ?? []) as WatchLog[]);
     }
     loadDashboardData();
   }, [session]);

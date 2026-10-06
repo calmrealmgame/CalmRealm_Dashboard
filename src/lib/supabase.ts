@@ -54,6 +54,7 @@ export type WatchLog = {
   HRV?: number | null;
   EDA: number | null;
   IMU: unknown;
+  EMS?: number | null;
   Class?: number | null;
   emotionValue: string | null;
   LoginSession: number | null;

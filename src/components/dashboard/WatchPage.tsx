@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Participant, WatchLog } from "@/lib/supabase";
 import {
@@ -14,6 +14,7 @@ import {
   matchesParticipant,
   participantName,
   withinDateRange,
+  CORE_ACTS,
   type Filters,
 } from "./shared";
 
@@ -112,21 +113,11 @@ function formatLoginSession(value: number | null | undefined) {
 
 function smoothPath(points: { x: number; y: number }[]) {
   if (!points.length) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-
-  const commands = [`M ${points[0].x} ${points[0].y}`];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index];
-    const next = points[index + 1];
-    const previous = points[index - 1] ?? current;
-    const following = points[index + 2] ?? next;
-    commands.push(
-      `C ${current.x + (next.x - previous.x) / 6} ${current.y + (next.y - previous.y) / 6}, ${
-        next.x - (following.x - current.x) / 6
-      } ${next.y - (following.y - current.y) / 6}, ${next.x} ${next.y}`,
-    );
-  }
-  return commands.join(" ");
+  const [first, ...rest] = points;
+  return [
+    `M ${first.x} ${first.y}`,
+    ...rest.map((point) => `L ${point.x} ${point.y}`),
+  ].join(" ");
 }
 
 function watchActsInDataOrder(logs: WatchLog[]) {
@@ -147,14 +138,12 @@ export function ParticipantWatchProfile({
   filters,
   selectedUserId,
   canExport,
-  onBack,
 }: {
   participants: Participant[];
   watchLogs: WatchLog[];
   filters: Filters;
   selectedUserId: number;
   canExport: boolean;
-  onBack: () => void;
 }) {
   const userById = new Map(participants.map((user) => [user.userId, user]));
   const acts = watchActsInDataOrder(watchLogs);
@@ -174,7 +163,7 @@ export function ParticipantWatchProfile({
     return withinDateRange(log.timestamp, filters);
   });
 
-  const sensorSummary = buildActSensorSummary(participants, sensorLogs, acts);
+  const sensorSummary = buildActSensorSummary(participants, sensorLogs);
   const selectedUser =
     sensorSummary.userSummaries.find(
       (summary) => summary.userId === selectedUserId,
@@ -188,12 +177,10 @@ export function ParticipantWatchProfile({
     selectedUserId,
   );
 
+  const [sensorSummaryOpen, setSensorSummaryOpen] = useState(true);
+
   return (
     <>
-      <button className="back-button" onClick={onBack} type="button">
-        <ArrowLeft size={16} />
-        Back to Overview
-      </button>
       <section className="participant-detail-hero">
         <div>
           <span>Participant</span>
@@ -206,15 +193,31 @@ export function ParticipantWatchProfile({
           </small>
         </div>
       </section>
-      <section className="dashboard-layout overview-layout">
+      <section className="dashboard-layout overview-layout participant-watch-layout">
         <div className="main-stack">
-          <div className="table-heading secondary-heading">
+          <button
+            type="button"
+            className={`collapsible-heading table-heading secondary-heading${
+              sensorSummaryOpen ? " collapsible-heading--open" : ""
+            }`}
+            onClick={() => setSensorSummaryOpen((prev) => !prev)}
+          >
             <div>
               <h2>Sensor Summary</h2>
               <p>Timestamp trends by login session for this participant.</p>
             </div>
-          </div>
-          <SensorTimelinePanel logs={selectedUserLogs} />
+            <ChevronDown
+              size={20}
+              className={`collapsible-chevron${
+                sensorSummaryOpen ? " collapsible-chevron--open" : ""
+              }`}
+            />
+          </button>
+          {sensorSummaryOpen ? (
+            <div className="collapsible-body collapsible-body--open">
+              <SensorTimelinePanel logs={selectedUserLogs} />
+            </div>
+          ) : null}
           <div className="table-heading">
             <h2>Watch Samples</h2>
           </div>
@@ -281,7 +284,7 @@ function buildWatchSampleRows(
         PPG: log.PPG ?? "",
         EDA: log.EDA ?? "",
         IMU: asNumber(log.IMU) ?? JSON.stringify(log.IMU ?? ""),
-        Class: formatClassValue(readMetricValue(log, "class")),
+        EMS: formatClassValue(readMetricValue(log, "class")),
         "Time Stamps": formatTimestamp(log.timestamp),
       };
     });
@@ -290,7 +293,6 @@ function buildWatchSampleRows(
 function buildActSensorSummary(
   participants: Participant[],
   logs: WatchLog[],
-  allActs: string[],
 ) {
   const userById = new Map(participants.map((user) => [user.userId, user]));
   const logsByUserAct = new Map<string, WatchLog[]>();
@@ -352,8 +354,13 @@ function buildActSensorSummary(
     logsByUser,
     ([userId, userLogs]) => {
       const user = userById.get(userId);
-      const playedActs = new Set(
-        userLogs.map((log) => log.act?.trim()).filter(Boolean),
+      const playedCoreActs = new Set(
+        userLogs
+          .map((log) => log.act?.trim().toLowerCase())
+          .filter(
+            (act): act is string =>
+              act !== undefined && CORE_ACTS.includes(act),
+          ),
       ).size;
       const loginSessions = new Set(
         userLogs
@@ -379,11 +386,9 @@ function buildActSensorSummary(
         age: user?.age ?? null,
         sex: normalizeSex(user?.gender),
         school: user?.school ?? null,
-        playedActs,
-        totalActs: allActs.length,
-        completionPercent: allActs.length
-          ? (playedActs / allActs.length) * 100
-          : 0,
+        playedActs: playedCoreActs,
+        totalActs: CORE_ACTS.length,
+        completionPercent: (playedCoreActs / CORE_ACTS.length) * 100,
         duration: estimateGroupAverageDurationValue(userLogs),
         latestSample,
         latestLoginSession: latestLog?.LoginSession ?? null,
@@ -454,24 +459,24 @@ type ChartTooltip = {
 
 const TIMELINE_METRICS: TimelineMetric[] = [
   {
-    key: "hrv",
-    label: "HRV (RMSSD)",
-    unit: "ms",
-    color: "#39a866",
-    kind: "line",
-    decimals: 1,
-  },
-  {
     key: "ppg",
-    label: "PPG",
+    label: "PPG — Heart Rate",
     unit: "BPM",
     color: "#2f6fbd",
     kind: "line",
     decimals: 1,
   },
   {
+    key: "hrv",
+    label: "HRV — RMSSD",
+    unit: "ms",
+    color: "#39a866",
+    kind: "line",
+    decimals: 1,
+  },
+  {
     key: "eda",
-    label: "Electrodermal Activity (EDA)",
+    label: "EDA — Skin Conductance",
     unit: "µS",
     color: "#9b5bd6",
     kind: "line",
@@ -479,18 +484,18 @@ const TIMELINE_METRICS: TimelineMetric[] = [
   },
   {
     key: "imu",
-    label: "Movement (Accelerometer)",
-    unit: "Low / Medium / High",
+    label: "IMU — Movement",
+    unit: "g",
     color: "#f59e0b",
-    kind: "movement",
+    kind: "line",
     decimals: 2,
   },
   {
     key: "class",
-    label: "ESM (ระดับอารมณ์)",
+    label: "EMS — Emotion Level",
     unit: "Emotion 1-5",
     color: "#ef4444",
-    kind: "class",
+    kind: "line",
     decimals: 0,
   },
 ];
@@ -525,7 +530,11 @@ function readMetricValue(log: WatchLog, metric: TimelineMetric["key"]) {
     );
   }
   return finite(
-    asNumber(log.Class) ?? asNumber(log.class) ?? asNumber(log.emotionValue),
+    asNumber(log.EMS) ??
+      asNumber(log.ems) ??
+      asNumber(log.Class) ??
+      asNumber(log.class) ??
+      asNumber(log.emotionValue),
   );
 }
 
@@ -595,6 +604,7 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
   );
   const defaultSession = sessionOptions.length ? String(sessionOptions[0]) : "";
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [activeSampleTime, setActiveSampleTime] = useState<number | null>(null);
   const activeSession =
     selectedSession === null ||
     !sessionOptions.map(String).includes(selectedSession)
@@ -617,7 +627,10 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
           Login session
           <select
             value={activeSession}
-            onChange={(event) => setSelectedSession(event.target.value)}
+            onChange={(event) => {
+              setSelectedSession(event.target.value);
+              setActiveSampleTime(null);
+            }}
           >
             {sessionOptions.map((value) => (
               <option key={value} value={String(value)}>
@@ -634,6 +647,8 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
             key={metric.key}
             metric={metric}
             points={timedLogs}
+            activeTime={activeSampleTime}
+            onActiveTimeChange={setActiveSampleTime}
           />
         ))}
       </div>
@@ -644,9 +659,13 @@ function SensorTimelinePanel({ logs }: { logs: WatchLog[] }) {
 function SensorTimelineChart({
   metric,
   points,
+  activeTime,
+  onActiveTimeChange,
 }: {
   metric: TimelineMetric;
   points: { log: WatchLog; time: number }[];
+  activeTime: number | null;
+  onActiveTimeChange: (time: number | null) => void;
 }) {
   const [tooltip, setTooltip] = useState<ChartTooltip | null>(null);
   const width = 1180;
@@ -654,39 +673,40 @@ function SensorTimelineChart({
   const padding = {
     top: 16,
     right: metric.kind === "class" ? 290 : metric.kind === "movement" ? 90 : 22,
-    bottom: 42,
+    bottom: 34,
     left: metric.kind === "class" ? 68 : 54,
   };
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
-  const acts = sortActs(
-    Array.from(
-      new Set(
-        points
-          .map((point) => formatActLabel(point.log.act?.trim() || "Unknown"))
-          .filter(Boolean),
-      ),
-    ),
-  );
   const values = points
     .map((point) => readMetricValue(point.log, metric.key))
     .filter(
       (value): value is number => value !== null && Number.isFinite(value),
     );
   const domain = metricDomain(values, metric);
+  const acts = sortActs(
+    Array.from(
+      new Set(
+        points
+          .map((point) => point.log.act?.trim().toLowerCase() || "unknown")
+          .filter(Boolean),
+      ),
+    ),
+  );
   const actStep = acts.length ? innerWidth / acts.length : innerWidth;
   const actTimeRanges = new Map(
     acts.map((act) => {
       const actTimes = points
         .filter(
-          (point) => formatActLabel(point.log.act?.trim() || "Unknown") === act,
+          (point) =>
+            (point.log.act?.trim().toLowerCase() || "unknown") === act,
         )
         .map((point) => point.time);
       return [act, { min: Math.min(...actTimes), max: Math.max(...actTimes) }];
     }),
   );
-  const xForActTimestamp = (log: WatchLog, time: number) => {
-    const act = formatActLabel(log.act?.trim() || "Unknown");
+  const xForPoint = (log: WatchLog, time: number) => {
+    const act = log.act?.trim().toLowerCase() || "unknown";
     const actIndex = Math.max(0, acts.indexOf(act));
     const range = actTimeRanges.get(act);
     const ratio =
@@ -696,11 +716,7 @@ function SensorTimelineChart({
       range.max > range.min
         ? (time - range.min) / (range.max - range.min)
         : 0.5;
-    return (
-      padding.left +
-      actStep * actIndex +
-      Math.max(0.12, Math.min(0.88, ratio)) * actStep
-    );
+    return padding.left + actStep * actIndex + ratio * actStep;
   };
   const yForValue = (value: number) =>
     padding.top +
@@ -716,7 +732,7 @@ function SensorTimelineChart({
     );
   const path = smoothPath(
     drawable.map((point) => ({
-      x: xForActTimestamp(point.log, point.time),
+      x: xForPoint(point.log, point.time),
       y: yForValue(point.value),
     })),
   );
@@ -724,13 +740,14 @@ function SensorTimelineChart({
   const movementBaseY = yForValue(domain.min);
   const barWidth = Math.max(
     2,
-    Math.min(5, (actStep || innerWidth) / Math.max(drawable.length, 1) / 1.6),
+    Math.min(5, innerWidth / Math.max(drawable.length, 1) / 1.6),
   );
   const tooltipForPoint = (
     point: { log: WatchLog; time: number; value: number },
     clientX: number,
     clientY: number,
   ) => {
+    onActiveTimeChange(point.time);
     const act = formatActLabel(point.log.act?.trim() || "Unknown");
     const color =
       metric.kind === "movement"
@@ -772,6 +789,14 @@ function SensorTimelineChart({
       rows,
     });
   };
+  const clearActivePoint = () => {
+    setTooltip(null);
+    onActiveTimeChange(null);
+  };
+  const activePoint =
+    activeTime === null
+      ? null
+      : (drawable.find((point) => point.time === activeTime) ?? null);
 
   return (
     <article className="sensor-timeline-chart">
@@ -827,17 +852,10 @@ function SensorTimelineChart({
           />
           {acts.map((act, index) => {
             const x = padding.left + actStep * index + actStep / 2;
-            const range = actTimeRanges.get(act);
-            const label =
-              range && Number.isFinite(range.min) && Number.isFinite(range.max)
-                ? range.min === range.max
-                  ? timeLabel(range.min)
-                  : `${timeLabel(range.min)}-${timeLabel(range.max)}`
-                : "";
             return (
-              <g key={act}>
+              <g key={`${metric.key}-act-${act}`}>
                 <line
-                  className="act-minigame-line"
+                  className="chart-time-grid-line"
                   x1={x}
                   x2={x}
                   y1={padding.top}
@@ -849,19 +867,20 @@ function SensorTimelineChart({
                   y={height - 22}
                   textAnchor="middle"
                 >
-                  {act}
-                </text>
-                <text
-                  className="chart-x-label chart-x-time-label"
-                  x={x}
-                  y={height - 8}
-                  textAnchor="middle"
-                >
-                  {label}
+                  {formatActLabel(act)}
                 </text>
               </g>
             );
           })}
+          {activePoint ? (
+            <line
+              className="sensor-sync-line"
+              x1={xForPoint(activePoint.log, activePoint.time)}
+              x2={xForPoint(activePoint.log, activePoint.time)}
+              y1={padding.top}
+              y2={height - padding.bottom}
+            />
+          ) : null}
           {metric.kind === "line" ? (
             <>
               <path
@@ -873,7 +892,7 @@ function SensorTimelineChart({
               {drawable.map((point, index) => (
                 <circle
                   key={`${metric.key}-${point.time}-${index}`}
-                  cx={xForActTimestamp(point.log, point.time)}
+                  cx={xForPoint(point.log, point.time)}
                   cy={yForValue(point.value)}
                   r={2.4}
                   fill={metric.color}
@@ -886,16 +905,16 @@ function SensorTimelineChart({
                   onPointerDown={(event) =>
                     tooltipForPoint(point, event.clientX, event.clientY)
                   }
-                  onPointerLeave={() => setTooltip(null)}
-                  onPointerUp={() => setTooltip(null)}
-                  onPointerCancel={() => setTooltip(null)}
+                  onPointerLeave={clearActivePoint}
+                  onPointerUp={clearActivePoint}
+                  onPointerCancel={clearActivePoint}
                 />
               ))}
             </>
           ) : metric.kind === "movement" ? (
             <>
               {drawable.map((point, index) => {
-                const x = xForActTimestamp(point.log, point.time);
+                const x = xForPoint(point.log, point.time);
                 const y = yForValue(point.value);
                 return (
                   <rect
@@ -916,9 +935,9 @@ function SensorTimelineChart({
                     onPointerDown={(event) =>
                       tooltipForPoint(point, event.clientX, event.clientY)
                     }
-                    onPointerLeave={() => setTooltip(null)}
-                    onPointerUp={() => setTooltip(null)}
-                    onPointerCancel={() => setTooltip(null)}
+                    onPointerLeave={clearActivePoint}
+                    onPointerUp={clearActivePoint}
+                    onPointerCancel={clearActivePoint}
                   />
                 );
               })}
@@ -943,7 +962,7 @@ function SensorTimelineChart({
                 return (
                   <circle
                     key={`${metric.key}-${point.time}-${index}`}
-                    cx={xForActTimestamp(point.log, point.time)}
+                    cx={xForPoint(point.log, point.time)}
                     cy={yForValue(emotion.value)}
                     r={4}
                     fill={emotion.color}
@@ -956,9 +975,9 @@ function SensorTimelineChart({
                     onPointerDown={(event) =>
                       tooltipForPoint(point, event.clientX, event.clientY)
                     }
-                    onPointerLeave={() => setTooltip(null)}
-                    onPointerUp={() => setTooltip(null)}
-                    onPointerCancel={() => setTooltip(null)}
+                    onPointerLeave={clearActivePoint}
+                    onPointerUp={clearActivePoint}
+                    onPointerCancel={clearActivePoint}
                   />
                 );
               })}
@@ -980,6 +999,21 @@ function SensorTimelineChart({
               </g>
             </>
           )}
+          {activePoint ? (
+            <circle
+              className="sensor-sync-dot"
+              cx={xForPoint(activePoint.log, activePoint.time)}
+              cy={yForValue(activePoint.value)}
+              r={4.5}
+              fill={
+                metric.kind === "class"
+                  ? emotionFromValue(activePoint.value).color
+                  : metric.kind === "movement"
+                    ? movementColor(activePoint.value, domain)
+                    : metric.color
+              }
+            />
+          ) : null}
         </svg>
       </div>
       {tooltip ? (

@@ -2,6 +2,7 @@
 
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ArrowUpDown,
   CheckCircle2,
@@ -47,6 +48,9 @@ export const PREDEFINED_ACT_ORDER = [
   "act5",
   "act6",
 ];
+
+/** The 6 core acts that count towards completion (minigames excluded). */
+export const CORE_ACTS = ["act1", "act2", "act3", "act4", "act5", "act6"];
 export function sortActs(acts: string[]) {
   return [...acts].sort((a, b) => {
     const aIndex = PREDEFINED_ACT_ORDER.indexOf(a.toLowerCase());
@@ -60,7 +64,7 @@ export function sortActs(acts: string[]) {
 export function formatActLabel(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
-  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1).toLowerCase()}`;
 }
 function csvEscape(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -341,12 +345,16 @@ export function PageHeader({
   filters,
   setFilters,
   participants,
+  onBack,
+  backLabel = "Back to Overview",
 }: {
   title: string;
   description: string;
   filters?: Filters;
   setFilters?: (filters: Filters) => void;
   participants?: Participant[];
+  onBack?: () => void;
+  backLabel?: string;
 }) {
   const genders = participants
     ? uniqueValues(participants, (user) => user.gender)
@@ -370,9 +378,21 @@ export function PageHeader({
   return (
     <header className="dashboard-header-sticky">
       <div className="dashboard-header-top">
-        <div>
-          <h1>{title}</h1>
-          <p>{description}</p>
+        <div className="dashboard-header-title-wrap">
+          {onBack ? (
+            <button
+              className="header-back-button"
+              onClick={onBack}
+              type="button"
+            >
+              <ArrowLeft size={16} />
+              <span>{backLabel}</span>
+            </button>
+          ) : null}
+          <div>
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </div>
         </div>
         {hasActiveFilters && setFilters ? (
           <button
@@ -724,6 +744,26 @@ export function DonutPanel({
   );
 }
 
+export function matchesSearch(
+  row: Record<string, unknown>,
+  query: string,
+): boolean {
+  if (!query) return true;
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const valuesText = Object.values(row)
+    .map((val) => {
+      if (val == null) return "";
+      if (typeof val === "object") return JSON.stringify(val);
+      return String(val);
+    })
+    .join(" ")
+    .toLowerCase();
+
+  return tokens.every((token) => valuesText.includes(token));
+}
+
 export function DataTable({
   rows,
   exportFilename,
@@ -754,9 +794,7 @@ export function DataTable({
   };
 
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter((row) =>
-      JSON.stringify(row).toLowerCase().includes(query.toLowerCase()),
-    );
+    const filtered = rows.filter((row) => matchesSearch(row, query));
     if (!sortKey) return filtered;
 
     return [...filtered].sort((a, b) => {

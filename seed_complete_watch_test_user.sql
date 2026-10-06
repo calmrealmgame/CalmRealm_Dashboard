@@ -331,6 +331,11 @@ commit;
 -- group by "LoginSession"
 -- order by "LoginSession";
 --
+-- Expected:
+-- LoginSession 1 = 10 acts, 60 samples
+-- LoginSession 2 = 10 acts, 60 samples
+-- LoginSession 3 = 10 acts, 60 samples
+--
 -- select "act", count(*) as samples, min("Class") as min_class, max("Class") as max_class
 -- from public."Watch Log"
 -- where "userId" in (

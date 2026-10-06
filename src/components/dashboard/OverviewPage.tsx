@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Eye, Search, UsersRound, VenusAndMars } from "lucide-react";
+import { Download, Eye, Search, UsersRound, VenusAndMars, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Participant, SceneData, WatchLog } from "@/lib/supabase";
 import {
@@ -21,6 +21,8 @@ import {
   withinDateRange,
   type Filters,
   MetricCard,
+  matchesSearch,
+  CORE_ACTS,
 } from "./shared";
 import { ParticipantWatchProfile } from "./WatchPage";
 
@@ -50,7 +52,9 @@ function sceneActsInDataOrder(scenes: SceneData[]) {
   const seen = new Set<string>();
   const acts: string[] = [];
   scenes.forEach((scene) => {
-    const act = formatActLabel(scene.act?.trim() || "");
+    const raw = scene.act?.trim().toLowerCase() || "";
+    if (!raw || !CORE_ACTS.includes(raw)) return;
+    const act = formatActLabel(raw);
     if (!act || seen.has(act)) return;
     seen.add(act);
     acts.push(act);
@@ -157,6 +161,15 @@ export function OverviewPage({
       ? userDurations.reduce((sum, d) => sum + d, 0)
       : null;
 
+    const userPlayedCoreActs = new Set(
+      [
+        ...userScenes.map((s) => s.act?.trim().toLowerCase()),
+        ...userWatchLogs.map((l) => l.act?.trim().toLowerCase()),
+      ].filter(
+        (act): act is string => act !== undefined && CORE_ACTS.includes(act),
+      ),
+    );
+
     return {
       UserId: user.userId,
       User: participantName(user),
@@ -164,7 +177,7 @@ export function OverviewPage({
       Gender: user.gender ?? "",
       School: user.school ?? "",
       "Login Sessions": userLoginSessions.size,
-      "Total ACTs": availableActs.length,
+      "Total ACTs": userPlayedCoreActs.size,
       "Play Duration":
         userTotalDuration === null
           ? "-"
@@ -179,6 +192,7 @@ export function OverviewPage({
         <PageHeader
           title="Overview"
           description="Participant watch profile and timestamp sensor data."
+          onBack={() => setSelectedWatchUserId(null)}
         />
         <div className="page-body">
           <ParticipantWatchProfile
@@ -187,7 +201,6 @@ export function OverviewPage({
             filters={filters}
             selectedUserId={selectedWatchUserId}
             canExport={canExport}
-            onBack={() => setSelectedWatchUserId(null)}
           />
         </div>
       </>
@@ -272,8 +285,9 @@ function ParticipantProgressTable({
   onView: (userId: number) => void;
 }) {
   const [query, setQuery] = useState("");
-  const visibleRows = rows.filter((row) =>
-    JSON.stringify(row).toLowerCase().includes(query.toLowerCase()),
+  const visibleRows = useMemo(
+    () => rows.filter((row) => matchesSearch(row as Record<string, unknown>, query)),
+    [rows, query],
   );
   const exportRows = visibleRows.map((row) => ({
     User: row.User,
@@ -296,6 +310,15 @@ function ParticipantProgressTable({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
+          <button
+            className="search-clear-button"
+            disabled={!query}
+            onClick={() => setQuery("")}
+            title="Clear search"
+            type="button"
+          >
+            <X size={14} />
+          </button>
           <span>{visibleRows.length} rows</span>
         </div>
         <button
